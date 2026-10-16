@@ -292,6 +292,9 @@ class WasteHub:
                 by_calendar.setdefault(bin_.calendar, []).append(bin_)
         if not by_calendar:
             return
+        if not self.hass.services.has_service("calendar", "get_events"):
+            # Still starting up; the calendar state listener retries later.
+            return
 
         start = dt_util.start_of_local_day()
         today = start.date()
