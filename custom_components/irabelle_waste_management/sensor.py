@@ -10,7 +10,11 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT, EntityCategory
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -41,6 +45,7 @@ async def async_setup_entry(
             BinLastMotionSensor(hub, bin_),
             BinLastSeenSensor(hub, bin_),
             BinSignalSensor(hub, bin_),
+            BinBatterySensor(hub, bin_),
         ]
         if bin_.calendar:
             entities.append(BinNextCollectionSensor(hub, bin_))
@@ -123,6 +128,29 @@ class BinSignalSensor(BinEntity, SensorEntity):
     def native_value(self) -> int | None:
         """Return the RSSI, or None when no idle frame was heard recently."""
         return self.bin.signal
+
+
+class BinBatterySensor(BinEntity, SensorEntity):
+    """Battery level from the KKM extension data (scan response)."""
+
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hub: WasteHub, bin_: Bin) -> None:
+        """Initialise the sensor."""
+        super().__init__(hub, bin_, "battery")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the battery percent (None until a scan response is heard)."""
+        return self.bin.tracker.battery()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the unclamped value the beacon reports."""
+        return {"reported_level": self.bin.tracker.battery_reported}
 
 
 class BinNextCollectionSensor(BinEntity, SensorEntity):

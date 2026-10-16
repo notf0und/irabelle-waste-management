@@ -162,6 +162,14 @@
       "bins_to_bring_back": {
         "name": "Bins to bring back",
         "unit_of_measurement": "bins"
+      },
+      "battery": {
+        "name": "Battery",
+        "state_attributes": {
+          "reported_level": {
+            "name": "Reported level"
+          }
+        }
       }
     },
     "binary_sensor": {

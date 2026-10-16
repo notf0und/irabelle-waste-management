@@ -51,7 +51,11 @@ from .const import (
     SUBENTRY_BIN,
     TICK_SECONDS,
 )
-from .ibeacon import frame_from_service_info, normalize_uuid
+from .ibeacon import (
+    frame_from_service_info,
+    kkm_battery_from_service_info,
+    normalize_uuid,
+)
 from .tracker import BinTracker, TrackerSettings
 
 _LOGGER = logging.getLogger(__name__)
@@ -217,6 +221,10 @@ class WasteHub:
     def _make_advertisement_handler(self, bin_: Bin):
         @callback
         def _handle(service_info: bluetooth.BluetoothServiceInfoBleak) -> None:
+            battery = kkm_battery_from_service_info(service_info)
+            if battery is not None and battery != bin_.tracker.battery_reported:
+                bin_.tracker.battery_reported = battery
+                self._bin_changed(bin_)
             if (frame := frame_from_service_info(service_info)) is None:
                 return
             kind = bin_.frame_kind(frame.uuid)

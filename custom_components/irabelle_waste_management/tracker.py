@@ -54,6 +54,8 @@ class BinTracker:
     last_seen: datetime | None = None
     last_motion: datetime | None = None
     idle_streak_start: datetime | None = None
+    # Raw battery byte from the KKM extension data (can exceed 100 when fresh).
+    battery_reported: int | None = None
     _rssi_by_source: dict[str, tuple[int, datetime]] = field(default_factory=dict)
 
     # -- inputs -----------------------------------------------------------
@@ -118,6 +120,12 @@ class BinTracker:
         """Return True shortly after a motion frame."""
         return self.last_motion is not None and now - self.last_motion < _MOTION_HOLD
 
+    def battery(self) -> int | None:
+        """Battery percent, clamped to 100 like the KKM app does."""
+        if self.battery_reported is None:
+            return None
+        return min(self.battery_reported, 100)
+
     def best_rssi(self, now: datetime) -> int | None:
         """Return the strongest recent idle-frame RSSI across all proxies."""
         recent = [
@@ -137,12 +145,14 @@ class BinTracker:
             "status_reason": self.status_reason,
             "last_seen": _iso(self.last_seen),
             "last_motion": _iso(self.last_motion),
+            "battery_reported": self.battery_reported,
         }
 
     def restore(self, data: dict[str, Any], parse) -> None:
         """Restore state saved by as_dict(); `parse` turns ISO text into datetimes."""
         self.status = data.get("status")
         self.status_reason = data.get("status_reason")
+        self.battery_reported = data.get("battery_reported")
         for key in ("status_since", "last_seen", "last_motion"):
             if value := data.get(key):
                 setattr(self, key, parse(value))
