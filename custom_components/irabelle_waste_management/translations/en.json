@@ -13,7 +13,7 @@
         },
         "data_description": {
           "collection_window_start": "Motion while a bin is awaiting collection only counts as emptied inside this window.",
-          "collection_window_end": "At this time a bin that was already out at the start of the window is marked emptied, even if no motion was seen.",
+          "collection_window_end": "At this time a bin still awaiting collection is marked emptied, even if no motion was seen, when it was already out at the start of the window or when its calendar has a collection today.",
           "away_minutes": "A bin is awaiting collection once its normal advertisement has not been heard for this long.",
           "return_confirm_seconds": "A bin is back to filling once its normal advertisement has been heard continuously for this long."
         }
@@ -35,7 +35,7 @@
         },
         "data_description": {
           "collection_window_start": "Motion while a bin is awaiting collection only counts as emptied inside this window.",
-          "collection_window_end": "At this time a bin that was already out at the start of the window is marked emptied, even if no motion was seen.",
+          "collection_window_end": "At this time a bin still awaiting collection is marked emptied, even if no motion was seen, when it was already out at the start of the window or when its calendar has a collection today.",
           "away_minutes": "A bin is awaiting collection once its normal advertisement has not been heard for this long.",
           "return_confirm_seconds": "A bin is back to filling once its normal advertisement has been heard continuously for this long."
         }

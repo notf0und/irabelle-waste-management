@@ -266,7 +266,9 @@ class WasteHub:
     def _async_tick(self, _now: datetime | None = None) -> None:
         now = dt_util.now()
         for bin_ in self.bins.values():
-            changed = bin_.tracker.evaluate(now)
+            changed = bin_.tracker.evaluate(
+                now, collection_today=bin_.next_collection == now.date()
+            )
             in_range = bin_.tracker.in_range(now)
             if in_range != bin_.in_range:
                 bin_.in_range = in_range

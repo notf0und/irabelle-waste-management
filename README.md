@@ -19,7 +19,7 @@ This integration subscribes to every advertisement from the bin's MAC address an
 | --- | --- |
 | **Filling** | The bin's normal (idle) advertisement has been heard continuously for the *back home after* time (default 2 min). |
 | **Awaiting collection** | The idle advertisement has not been heard for the *out after* time (default 10 min): the bin is at the kerb. |
-| **Emptied** | While *Awaiting collection*, the beacon advertised motion inside the collection window (default 05:00-19:00), i.e. the truck lifted it. If no motion is seen, a bin that was already out when the window opened is marked emptied when the window closes. |
+| **Emptied** | While *Awaiting collection*, the beacon advertised motion inside the collection window (default 05:00-19:00), i.e. the truck lifted it. If no motion is seen (truck too far from the proxies), the bin is marked emptied when the window closes, provided it was already out when the window opened, or the bin's calendar has a collection today (e.g. put out at 06:00 on collection day). |
 
 The status survives restarts. `status_since` and `status_reason` attributes tell you when and why it last changed.
 

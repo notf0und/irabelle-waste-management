@@ -5,7 +5,8 @@ datetimes are timezone-aware and in the Home Assistant time zone.
 
     filling ──(no idle frame for `away`)──────────────► awaiting_collection
     awaiting_collection ──(motion inside the window)──► emptied
-    awaiting_collection ──(window end; already out at window start)──► emptied
+    awaiting_collection ──(window end; out since window start,
+                            or out before window end on a collection day)──► emptied
     awaiting_collection / emptied ──(idle frames for `confirm`)──► filling
 """
 
@@ -73,8 +74,13 @@ class BinTracker:
             return self._set(STATUS_EMPTIED, now, "motion")
         return False
 
-    def evaluate(self, now: datetime) -> bool:
-        """Apply the time-based rules. Return True if the status changed."""
+    def evaluate(self, now: datetime, collection_today: bool = False) -> bool:
+        """Apply the time-based rules. Return True if the status changed.
+
+        `collection_today` comes from the bin's calendar: on a collection day a
+        bin put out after the window opened (e.g. at 06:00) still falls back to
+        emptied at the window end, in case the truck's lift was not heard.
+        """
         if self.status != STATUS_FILLING and self._idle_confirmed(now):
             return self._set(STATUS_FILLING, now, "idle_advertising")
 
@@ -89,7 +95,14 @@ class BinTracker:
             self.status == STATUS_AWAITING
             and now.timetz().replace(tzinfo=None) >= self.settings.window_end
             and self.status_since is not None
-            and self.status_since < self._today_at(now, self.settings.window_start)
+            and (
+                self.status_since < self._today_at(now, self.settings.window_start)
+                or (
+                    collection_today
+                    and self.status_since
+                    < self._today_at(now, self.settings.window_end)
+                )
+            )
         ):
             return self._set(STATUS_EMPTIED, now, "window_end_fallback")
 
