@@ -48,6 +48,12 @@ SIGNAL_UPDATE_SECONDS: Final = 60
 # RSSI readings older than this are ignored when picking the best proxy.
 SIGNAL_WINDOW_SECONDS: Final = 60
 CALENDAR_REFRESH_MINUTES: Final = 30
+# Proxies scan passively by default, so the scan response carrying the battery
+# (KKM service data 0x2080) is only heard during a short active sweep.
+BATTERY_SWEEP_HOURS: Final = 6
+BATTERY_SWEEP_SECONDS: Final = 10
+# Sooner retry while a bin has no battery reading yet (weak or new beacons).
+BATTERY_RETRY_MINUTES: Final = 30
 CALENDAR_LOOKAHEAD_DAYS: Final = 45
 
 STORAGE_VERSION: Final = 1

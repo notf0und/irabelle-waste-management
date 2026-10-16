@@ -18,10 +18,14 @@ from homeassistant.helpers.event import (
     async_track_time_change,
     async_track_time_interval,
 )
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    BATTERY_RETRY_MINUTES,
+    BATTERY_SWEEP_HOURS,
+    BATTERY_SWEEP_SECONDS,
     CALENDAR_LOOKAHEAD_DAYS,
     CALENDAR_REFRESH_MINUTES,
     CONF_ADDRESS,
@@ -116,6 +120,7 @@ class WasteHub:
         self._motion_timers: dict[str, CALLBACK_TYPE] = {}
         self._calendar_errors: set[str] = set()
         self._calendar_refresh_pending = False
+        self._battery_retry: CALLBACK_TYPE | None = None
 
         settings = TrackerSettings(
             window_start=dt_util.parse_time(hub_option(entry, CONF_WINDOW_START)),
@@ -178,6 +183,14 @@ class WasteHub:
                 self.hass, self._async_refresh_calendars, hour=0, minute=0, second=30
             )
         )
+        self._unsubs.append(
+            async_track_time_interval(
+                self.hass,
+                self._async_battery_sweep,
+                timedelta(hours=BATTERY_SWEEP_HOURS),
+            )
+        )
+        self._unsubs.append(async_at_started(self.hass, self._async_battery_sweep))
         # Calendars may not exist yet, or not have loaded their data, while
         # Home Assistant starts: refresh again whenever one of them changes.
         if calendars := sorted({b.calendar for b in self.bins.values() if b.calendar}):
@@ -211,10 +224,36 @@ class WasteHub:
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
+        if self._battery_retry is not None:
+            self._battery_retry()
+            self._battery_retry = None
         for cancel in self._motion_timers.values():
             cancel()
         self._motion_timers.clear()
         await self._store.async_save(self._data_to_save())
+
+    async def _async_battery_sweep(self, _now: Any = None) -> None:
+        """Ask the proxies for a short active scan to collect battery levels."""
+        if not self.bins:
+            return
+        try:
+            await bluetooth.async_request_active_scan(self.hass, BATTERY_SWEEP_SECONDS)
+        except Exception as err:  # noqa: BLE001 - best effort only
+            _LOGGER.debug("Active scan request failed: %s", err)
+        if self._battery_retry is None and any(
+            b.tracker.battery_reported is None for b in self.bins.values()
+        ):
+
+            @callback
+            def _retry(_now: datetime) -> None:
+                self._battery_retry = None
+                self.entry.async_create_background_task(
+                    self.hass, self._async_battery_sweep(), f"{DOMAIN} battery sweep"
+                )
+
+            self._battery_retry = async_call_later(
+                self.hass, timedelta(minutes=BATTERY_RETRY_MINUTES), _retry
+            )
 
     # -- advertisements ---------------------------------------------------
 

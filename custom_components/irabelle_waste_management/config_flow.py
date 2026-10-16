@@ -159,7 +159,7 @@ class BinSubentryFlow(ConfigSubentryFlow):
         """Initialise the flow."""
         self._address: str | None = None
         self._name: str | None = None
-        self._seen: dict[str, IBeaconFrame] = {}
+        self._seen: dict[str, tuple[IBeaconFrame, str | None, int | None]] = {}
 
     # -- add ---------------------------------------------------------------
 
@@ -189,9 +189,16 @@ class BinSubentryFlow(ConfigSubentryFlow):
         options = [
             SelectOptionDict(
                 value=address,
-                label=f"{address} · {frame.uuid} ({frame.major}/{frame.minor})",
+                label=(
+                    f"{name + ' · ' if name and name != address else ''}{address}"
+                    f" · {frame.uuid} ({frame.major}/{frame.minor})"
+                    f"{f' · {rssi} dBm' if rssi is not None else ''}"
+                ),
             )
-            for address, frame in sorted(self._seen.items())
+            # Strongest first: the bin being set up is usually the nearest.
+            for address, (frame, name, rssi) in sorted(
+                self._seen.items(), key=lambda item: -(item[1][2] or -200)
+            )
         ]
         schema = vol.Schema(
             {
@@ -229,7 +236,8 @@ class BinSubentryFlow(ConfigSubentryFlow):
                 )
 
         suggested = user_input or {}
-        if not suggested and (frame := self._seen.get(self._address)):
+        if not suggested and (seen := self._seen.get(self._address)):
+            frame = seen[0]
             # The beacon is normally at rest, so what we hear is its idle frame.
             suggested = {CONF_IDLE_UUID: frame.uuid}
         return self.async_show_form(
@@ -311,13 +319,31 @@ def _validate_details(
 
 
 @callback
-def _discovered_ibeacons(hass, exclude: set[str]) -> dict[str, IBeaconFrame]:
+def _discovered_ibeacons(
+    hass, exclude: set[str]
+) -> dict[str, tuple[IBeaconFrame, str | None, int | None]]:
     """iBeacons the Bluetooth proxies currently hear, by MAC address."""
-    found: dict[str, IBeaconFrame] = {}
+    found: dict[str, tuple[IBeaconFrame, str | None, int | None]] = {}
     for info in bluetooth.async_discovered_service_info(hass, connectable=False):
         address = info.address.upper()
         if address in exclude:
             continue
+        if _is_random_private(info):
+            # Rotating addresses (phones, beacons in config mode) cannot be
+            # tracked by MAC; they can still be typed in by hand.
+            continue
         if (frame := frame_from_service_info(info)) is not None:
-            found[address] = frame
+            found[address] = (frame, info.name, info.rssi)
     return found
+
+
+def _is_random_private(info) -> bool:
+    """True for a resolvable private address (rotates, cannot be tracked by MAC).
+
+    Proxies report the address type (0 public, 1 random); only random addresses
+    whose two top bits are 01 are resolvable private addresses.
+    """
+    details = getattr(info.device, "details", None) or {}
+    if details.get("address_type") != 1:
+        return False
+    return (int(info.address[:2], 16) >> 6) == 0b01
