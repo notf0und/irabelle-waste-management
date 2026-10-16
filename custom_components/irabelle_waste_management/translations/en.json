@@ -1,0 +1,179 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Irabelle Waste Management",
+        "description": "Create the hub. Bins are added afterwards with the **Add bin** button on the integration page.",
+        "data": {
+          "name": "Name",
+          "collection_window_start": "Collection window start",
+          "collection_window_end": "Collection window end",
+          "away_minutes": "Out after",
+          "return_confirm_seconds": "Back home after"
+        },
+        "data_description": {
+          "collection_window_start": "Motion while a bin is awaiting collection only counts as emptied inside this window.",
+          "collection_window_end": "At this time a bin that was already out at the start of the window is marked emptied, even if no motion was seen.",
+          "away_minutes": "A bin is awaiting collection once its normal advertisement has not been heard for this long.",
+          "return_confirm_seconds": "A bin is back to filling once its normal advertisement has been heard continuously for this long."
+        }
+      }
+    },
+    "error": {
+      "window_order": "The window must end after it starts (same day)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timing rules",
+        "data": {
+          "collection_window_start": "Collection window start",
+          "collection_window_end": "Collection window end",
+          "away_minutes": "Out after",
+          "return_confirm_seconds": "Back home after"
+        },
+        "data_description": {
+          "collection_window_start": "Motion while a bin is awaiting collection only counts as emptied inside this window.",
+          "collection_window_end": "At this time a bin that was already out at the start of the window is marked emptied, even if no motion was seen.",
+          "away_minutes": "A bin is awaiting collection once its normal advertisement has not been heard for this long.",
+          "return_confirm_seconds": "A bin is back to filling once its normal advertisement has been heard continuously for this long."
+        }
+      }
+    },
+    "error": {
+      "window_order": "The window must end after it starts (same day)."
+    }
+  },
+  "config_subentries": {
+    "bin": {
+      "initiate_flow": {
+        "user": "Add bin",
+        "reconfigure": "Edit bin"
+      },
+      "entry_type": "Bin",
+      "step": {
+        "user": {
+          "title": "Add a bin",
+          "description": "The Bluetooth proxies currently hear {count} iBeacon(s) that are not configured yet. Leave the bin still so its normal (idle) advertisement is the one listed, or type the MAC address.",
+          "data": {
+            "name": "Name",
+            "address": "Beacon"
+          },
+          "data_description": {
+            "address": "MAC address of the bin's beacon."
+          }
+        },
+        "details": {
+          "title": "Beacon {address}",
+          "data": {
+            "idle_uuid": "Idle UUID",
+            "motion_uuid": "Motion UUID",
+            "calendar_entity": "Collection calendar",
+            "calendar_keyword": "Calendar keyword"
+          },
+          "data_description": {
+            "idle_uuid": "The UUID the beacon advertises while it is still.",
+            "motion_uuid": "The UUID it advertises when it moves. `auto` treats any other iBeacon UUID from this MAC as motion.",
+            "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit bin ({address})",
+          "data": {
+            "name": "Name",
+            "idle_uuid": "Idle UUID",
+            "motion_uuid": "Motion UUID",
+            "calendar_entity": "Collection calendar",
+            "calendar_keyword": "Calendar keyword"
+          },
+          "data_description": {
+            "motion_uuid": "`auto` treats any other iBeacon UUID from this MAC as motion.",
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count."
+          }
+        }
+      },
+      "error": {
+        "invalid_address": "Enter a MAC address such as AA:BB:CC:DD:EE:FF.",
+        "invalid_uuid": "Not a valid UUID.",
+        "same_uuid": "The motion UUID must differ from the idle UUID."
+      },
+      "abort": {
+        "already_configured": "This beacon is already configured.",
+        "reconfigure_successful": "Bin updated."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "filling": "Filling",
+          "awaiting_collection": "Awaiting collection",
+          "emptied": "Emptied"
+        },
+        "state_attributes": {
+          "status_since": {
+            "name": "Since"
+          },
+          "status_reason": {
+            "name": "Reason",
+            "state": {
+              "idle_advertising": "Normal advertisement heard",
+              "no_idle_advertising": "Normal advertisement lost",
+              "motion": "Motion in collection window",
+              "window_end_fallback": "Collection window ended"
+            }
+          },
+          "next_collection": {
+            "name": "Next collection"
+          },
+          "due": {
+            "name": "Due",
+            "state": {
+              "today": "Today",
+              "tomorrow": "Tomorrow"
+            }
+          }
+        }
+      },
+      "last_motion": {
+        "name": "Last motion"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "signal": {
+        "name": "Signal"
+      },
+      "next_collection": {
+        "name": "Next collection"
+      },
+      "bins_to_take_out": {
+        "name": "Bins to take out",
+        "unit_of_measurement": "bins"
+      },
+      "bins_awaiting_collection": {
+        "name": "Bins awaiting collection",
+        "unit_of_measurement": "bins"
+      },
+      "bins_to_bring_back": {
+        "name": "Bins to bring back",
+        "unit_of_measurement": "bins"
+      }
+    },
+    "binary_sensor": {
+      "motion": {
+        "name": "Motion"
+      },
+      "in_range": {
+        "name": "In range"
+      },
+      "ready_to_bring_back": {
+        "name": "Ready to bring back"
+      }
+    }
+  }
+}
