@@ -46,6 +46,29 @@ Hub summaries, meant as triggers and conditions for your own automations:
 | `sensor.<hub>_bins_to_bring_back` | Bins that have been emptied |
 | `binary_sensor.<hub>_ready_to_bring_back` | On once at least one bin is emptied and none is still awaiting collection |
 
+## Configure the beacons from Home Assistant
+
+KKM KBeacon / KBeacon Pro beacons (tested with the K4P and BC04P) can be configured over Bluetooth through your ESPHome proxies, like the KBeacon Pro app does. Open a bin and choose **⋮ → Configure**:
+
+| Screen | What it does |
+| --- | --- |
+| Bin settings | Bin name, UUIDs, collection calendar and the **beacon password** (KKM default `0000000000000000`) |
+| Beacon: general | Advertised name, measured power at 1 m, auto power-on, LED blinking |
+| Beacon: advertising slots | Per slot: type (iBeacon, Eddystone UID/URL/TLM, KSensor, System…), interval, transmit power, connectable, trigger-only, BLE 5 mode, channels, iBeacon UUID/major/minor |
+| Beacon: triggers | Per trigger: type (motion, buttons, periodic…), actions, slot, UUID change while triggered, duration, interval, power, motion sensitivity and sample rate |
+| Beacon: export / import settings | Copy one beacon's setup to others. An import never changes the beacon's name, password, UUID, major or minor; slots and triggers missing from the template are turned off |
+| Beacon: identify, change password, factory reset, power off | Reset and power off ask for confirmation |
+
+Only the options the beacon reports as supported are offered. Each screen reads the beacon first, so keep it near a proxy. Changing the UUID of the bin's idle advertisement updates the bin automatically.
+
+Every bin also gets an **Identify** button, a **Read beacon settings** button (model, firmware and hardware version appear on the device page), and the same operations are available as actions for scripts: `irabelle_waste_management.read_beacon_settings`, `write_beacon_settings`, `export_beacon_settings`, `import_beacon_settings`, `identify_beacon`, `change_beacon_password`, `reset_beacon`, `power_off_beacon`.
+
+Requirements:
+
+- **ESPHome 2026.8.0 or newer on the Bluetooth proxies.** Older firmware cannot complete Bluetooth connections (they time out after 20 s with `reason=0x100` / `status=133`) even though scanning works.
+- The beacon's slot must be **connectable** (the default), and the KBeacon app must not be connected to it at the same time.
+- Keep the password: a lost password can only be recovered with a factory reset using the beacon's button.
+
 ## Collection schedules
 
 Each bin can point at any Home Assistant **calendar** entity plus a keyword matched against the event title (case-insensitive), so the source of the schedule does not matter:

@@ -33,6 +33,8 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
     TimeSelector,
 )
 from homeassistant.util import dt as dt_util
@@ -40,6 +42,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ADDRESS,
     CONF_AWAY_MINUTES,
+    CONF_BEACON_PASSWORD,
     CONF_CALENDAR,
     CONF_IDLE_UUID,
     CONF_KEYWORD,
@@ -55,7 +58,9 @@ from .const import (
     MOTION_UUID_AUTO,
     SUBENTRY_BIN,
 )
+from .beacon_flow import BeaconStepsMixin
 from .ibeacon import IBeaconFrame, frame_from_service_info, normalize_uuid
+from .kbeacon.protocol import validate_password
 
 DEFAULT_TITLE = "Irabelle Waste Management"
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
@@ -152,7 +157,7 @@ class IrabelleWasteOptionsFlow(OptionsFlow):
         )
 
 
-class BinSubentryFlow(ConfigSubentryFlow):
+class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
     """Add or reconfigure a bin."""
 
     def __init__(self) -> None:
@@ -251,7 +256,7 @@ class BinSubentryFlow(ConfigSubentryFlow):
 
     # -- reconfigure -----------------------------------------------------
 
-    async def async_step_reconfigure(
+    async def async_step_bin_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Edit a bin (the MAC address stays the same)."""
@@ -262,15 +267,22 @@ class BinSubentryFlow(ConfigSubentryFlow):
             data, errors = _validate_details(user_input)
             if not errors:
                 data[CONF_ADDRESS] = subentry.data[CONF_ADDRESS]
+                if CONF_BEACON_PASSWORD not in data and (
+                    stored := subentry.data.get(CONF_BEACON_PASSWORD)
+                ):
+                    data[CONF_BEACON_PASSWORD] = stored
                 return self.async_update_and_abort(
                     self._get_entry(), subentry, title=name or subentry.title, data=data
                 )
         schema = vol.Schema({vol.Required(CONF_NAME): TextSelector()}).extend(
             _details_schema().schema
         )
-        values = user_input or {CONF_NAME: subentry.title, **subentry.data}
+        values = user_input or {
+            CONF_NAME: subentry.title,
+            **{k: v for k, v in subentry.data.items() if k != CONF_BEACON_PASSWORD},
+        }
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id="bin_settings",
             data_schema=self.add_suggested_values_to_schema(schema, values),
             errors=errors,
             description_placeholders={"address": subentry.data[CONF_ADDRESS]},
@@ -286,6 +298,9 @@ def _details_schema() -> vol.Schema:
                 EntitySelectorConfig(domain="calendar")
             ),
             vol.Optional(CONF_KEYWORD): TextSelector(),
+            vol.Optional(CONF_BEACON_PASSWORD): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
         }
     )
 
@@ -311,6 +326,14 @@ def _validate_details(
         else:
             if data[CONF_MOTION_UUID] == data.get(CONF_IDLE_UUID):
                 errors[CONF_MOTION_UUID] = "same_uuid"
+
+    if password := (user_input.get(CONF_BEACON_PASSWORD) or "").strip():
+        try:
+            validate_password(password)
+        except ValueError:
+            errors[CONF_BEACON_PASSWORD] = "password_length"
+        else:
+            data[CONF_BEACON_PASSWORD] = password
 
     if calendar := user_input.get(CONF_CALENDAR):
         data[CONF_CALENDAR] = calendar

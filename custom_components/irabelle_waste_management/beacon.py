@@ -40,6 +40,10 @@ class BeaconError(HomeAssistantError):
     """A beacon operation failed (shown to the user as is)."""
 
 
+class BeaconImportError(BeaconError):
+    """A settings template cannot be applied to this beacon."""
+
+
 class BeaconLoginError(BeaconError):
     """The beacon rejected the password."""
 
@@ -191,7 +195,7 @@ class BeaconManager:
             try:
                 payload = build_import(template, current, allow_other_model)
             except SettingsImportError as err:
-                raise BeaconError(f"{bin_.name}: {err}") from err
+                raise BeaconImportError(str(err)) from err
             await kb.write_config(payload)
             return await kb.read_config()
 

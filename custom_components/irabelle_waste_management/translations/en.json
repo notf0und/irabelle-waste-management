@@ -49,7 +49,7 @@
     "bin": {
       "initiate_flow": {
         "user": "Add bin",
-        "reconfigure": "Edit bin"
+        "reconfigure": "Configure"
       },
       "entry_type": "Bin",
       "step": {
@@ -70,38 +70,182 @@
             "idle_uuid": "Idle UUID",
             "motion_uuid": "Motion UUID",
             "calendar_entity": "Collection calendar",
-            "calendar_keyword": "Calendar keyword"
+            "calendar_keyword": "Calendar keyword",
+            "beacon_password": "Beacon password"
           },
           "data_description": {
             "idle_uuid": "The UUID the beacon advertises while it is still.",
             "motion_uuid": "The UUID it advertises when it moves. `auto` treats any other iBeacon UUID from this MAC as motion.",
             "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
-            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event."
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
+            "beacon_password": "Optional. Only needed to configure the beacon from Home Assistant; empty means KKM's default 0000000000000000."
           }
         },
         "reconfigure": {
-          "title": "Edit bin ({address})",
+          "title": "Configure bin ({address})",
+          "description": "Beacon settings are read from the beacon each time you open a screen, so keep it within range of a Bluetooth proxy.",
+          "menu_options": {
+            "bin_settings": "Bin settings (name, UUIDs, calendar, password)",
+            "beacon_general": "Beacon: general",
+            "beacon_slot_select": "Beacon: advertising slots",
+            "beacon_trigger_select": "Beacon: triggers (motion, button…)",
+            "beacon_export": "Beacon: export settings",
+            "beacon_import": "Beacon: import settings",
+            "beacon_identify": "Beacon: identify (flash LED)",
+            "beacon_password": "Beacon: change password",
+            "beacon_reset": "Beacon: factory reset",
+            "beacon_power_off": "Beacon: power off"
+          }
+        },
+        "bin_settings": {
+          "title": "Bin settings ({address})",
           "data": {
             "name": "Name",
             "idle_uuid": "Idle UUID",
             "motion_uuid": "Motion UUID",
             "calendar_entity": "Collection calendar",
-            "calendar_keyword": "Calendar keyword"
+            "calendar_keyword": "Calendar keyword",
+            "beacon_password": "Beacon password"
           },
           "data_description": {
             "motion_uuid": "`auto` treats any other iBeacon UUID from this MAC as motion.",
-            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count."
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count.",
+            "beacon_password": "KBeacon password (8-16 characters), used to configure the beacon. Leave empty to keep the stored one (default 0000000000000000)."
+          }
+        },
+        "beacon_general": {
+          "title": "Beacon: general",
+          "description": "{model}, firmware {firmware}, hardware {hardware}, battery {battery}%.",
+          "data": {
+            "name": "Beacon name",
+            "meaPwr": "Measured power at 1 m",
+            "atPwr": "Power on automatically",
+            "nBlk": "LED blink interval",
+            "lBlk": "Blink only when the battery is low"
+          },
+          "data_description": {
+            "name": "Up to 18 characters; this is the name the beacon advertises, not the bin name in Home Assistant.",
+            "meaPwr": "Calibrated RSSI at 1 m, used for distance estimates.",
+            "atPwr": "Turn on by itself when a battery is inserted."
+          }
+        },
+        "beacon_slot_select": {
+          "title": "Beacon: advertising slots",
+          "description": "Pick a slot and what it should advertise. Choosing Disabled turns the slot off.",
+          "data": {
+            "slot": "Slot",
+            "type": "Advertisement type"
+          }
+        },
+        "beacon_slot": {
+          "title": "Slot {slot}: {type}",
+          "data": {
+            "advPrd": "Advertising interval",
+            "txPwr": "Transmit power",
+            "conn": "Connectable",
+            "trAdv": "Only advertise when a trigger fires",
+            "mode": "Advertising mode",
+            "disabled_channels": "Disabled channels",
+            "uuid": "iBeacon UUID",
+            "majorID": "Major",
+            "minorID": "Minor",
+            "nid": "Namespace ID",
+            "sid": "Instance ID",
+            "url": "URL"
+          },
+          "data_description": {
+            "conn": "Keep this on: without a connectable slot, Home Assistant (and the KBeacon app) can only connect after pressing the beacon's button.",
+            "trAdv": "The slot stays silent until a trigger (e.g. motion) makes it advertise.",
+            "mode": "Long range and extended advertising need Bluetooth 5 receivers; ESP32 proxies only hear Legacy.",
+            "uuid": "Changing the UUID of the bin's idle advertisement updates the bin to follow it."
+          }
+        },
+        "beacon_trigger_select": {
+          "title": "Beacon: triggers",
+          "description": "Pick a trigger and its type. Choosing Disabled turns the trigger off.",
+          "data": {
+            "trigger": "Trigger",
+            "type": "Trigger type"
+          }
+        },
+        "beacon_trigger": {
+          "title": "Trigger {trigger}: {type}",
+          "data": {
+            "trAct": "Actions",
+            "slot": "Slot to advertise on",
+            "trAChg": "Change the UUID while triggered",
+            "trATm": "Triggered advertising duration",
+            "trAPrd": "Triggered advertising interval",
+            "trAPwr": "Triggered transmit power",
+            "trPara": "Sensitivity / parameter",
+            "odr": "Accelerometer sample rate",
+            "ocnt": "Motion duration to trigger"
+          },
+          "data_description": {
+            "trAChg": "The bins detect motion through this: while triggered the beacon advertises a different UUID (last byte + 1).",
+            "trPara": "Motion: 1 (most sensitive) to 126. Periodically: period in ms.",
+            "ocnt": "How many consecutive samples above the threshold count as motion."
+          }
+        },
+        "beacon_export": {
+          "title": "Beacon: export settings",
+          "description": "Copy this template and paste it in Import settings on another beacon. It contains everything except the beacon name, password, UUID, major and minor.",
+          "data": {
+            "template": "Settings template"
+          }
+        },
+        "beacon_import": {
+          "title": "Beacon: import settings",
+          "description": "Paste a template exported from another beacon. This beacon keeps its own name, password, UUID, major and minor; slots and triggers that are not in the template are turned off. {error}",
+          "data": {
+            "template": "Settings template",
+            "allow_other_model": "Allow a template from another model"
+          }
+        },
+        "beacon_password": {
+          "title": "Beacon: change password",
+          "description": "The new password is written to the beacon and stored in the bin. Keep it safe: if it is lost, only a factory reset with the beacon's button recovers the beacon.",
+          "data": {
+            "new_password": "New password",
+            "confirm_password": "Repeat the new password"
+          }
+        },
+        "beacon_reset": {
+          "title": "Beacon: factory reset",
+          "description": "Restores the beacon's factory configuration: name, password (back to 0000000000000000), slots, UUIDs and triggers. The bin stops being tracked until you set it up again (motion trigger with UUID change, and the new idle UUID in Bin settings).",
+          "data": {
+            "confirm": "Yes, reset this beacon"
+          }
+        },
+        "beacon_power_off": {
+          "title": "Beacon: power off",
+          "description": "The beacon stops advertising until its button is pressed. The bin will show as away.",
+          "data": {
+            "confirm": "Yes, power this beacon off"
           }
         }
       },
       "error": {
         "invalid_address": "Enter a MAC address such as AA:BB:CC:DD:EE:FF.",
         "invalid_uuid": "Not a valid UUID.",
-        "same_uuid": "The motion UUID must differ from the idle UUID."
+        "same_uuid": "The motion UUID must differ from the idle UUID.",
+        "name_length": "Use 1 to 18 characters.",
+        "all_channels_disabled": "At least one channel must stay enabled.",
+        "invalid_json": "That is not valid JSON.",
+        "import_rejected": "This template cannot be applied (see above).",
+        "password_length": "Passwords are 8 to 16 characters.",
+        "password_mismatch": "The passwords do not match.",
+        "confirm_required": "Tick the box to confirm."
       },
       "abort": {
         "already_configured": "This beacon is already configured.",
-        "reconfigure_successful": "Bin updated."
+        "reconfigure_successful": "Bin updated.",
+        "not_loaded": "The integration is not loaded.",
+        "beacon_error": "{error}",
+        "beacon_saved": "Saved to the beacon.",
+        "export_done": "Done.",
+        "identify_done": "The beacon is flashing its LED.",
+        "power_off_done": "The beacon is powered off. Press its button to turn it on."
       }
     }
   },
@@ -303,6 +447,59 @@
           "name": "New password",
           "description": "8 to 16 characters."
         }
+      }
+    }
+  },
+  "selector": {
+    "adv_type": {
+      "options": {
+        "0": "Disabled",
+        "1": "KSensor",
+        "2": "Eddystone UID",
+        "3": "Eddystone TLM",
+        "4": "Eddystone URL",
+        "5": "iBeacon",
+        "6": "System",
+        "7": "AOA",
+        "8": "EBeacon"
+      }
+    },
+    "adv_mode": {
+      "options": {
+        "0": "Legacy",
+        "1": "Long range (coded PHY)",
+        "2": "Extended advertising"
+      }
+    },
+    "trigger_type": {
+      "options": {
+        "0": "Disabled",
+        "1": "Motion",
+        "2": "Angle",
+        "3": "Button long press",
+        "4": "Button single click",
+        "5": "Button double click",
+        "6": "Button triple click",
+        "7": "Cut-off",
+        "8": "Temperature above",
+        "9": "Temperature below",
+        "10": "Humidity above",
+        "11": "Humidity below",
+        "12": "Humidity periodically",
+        "13": "PIR body detected",
+        "14": "Light above",
+        "15": "Light below",
+        "20": "Periodically"
+      }
+    },
+    "trigger_action": {
+      "options": {
+        "1": "Advertise",
+        "2": "Beep / alert",
+        "4": "Record",
+        "8": "Vibrate",
+        "16": "Report to app",
+        "32": "Bluetooth scan"
       }
     }
   }
