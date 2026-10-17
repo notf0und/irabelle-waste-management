@@ -182,6 +182,128 @@
       "ready_to_bring_back": {
         "name": "Ready to bring back"
       }
+    },
+    "button": {
+      "identify": {
+        "name": "Identify"
+      },
+      "read_settings": {
+        "name": "Read beacon settings"
+      }
+    }
+  },
+  "services": {
+    "read_beacon_settings": {
+      "name": "Read beacon settings",
+      "description": "Connect to a bin's KBeacon and read all of its settings (common, slots, triggers, sensors). Returns them as the response.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        }
+      }
+    },
+    "write_beacon_settings": {
+      "name": "Write beacon settings",
+      "description": "Write raw KBeacon settings (same structure as the read response: common fields plus advObj/trObj/srObj lists), then read everything back.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "settings": {
+          "name": "Settings",
+          "description": "For example {\"advObj\": [{\"slot\": 0, \"type\": 5, \"txPwr\": -8}]}."
+        }
+      }
+    },
+    "export_beacon_settings": {
+      "name": "Export beacon settings",
+      "description": "Return a settings template of the beacon that can be imported into other beacons. It never includes the name, password, UUID, major or minor.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "refresh": {
+          "name": "Read from the beacon",
+          "description": "Read the current settings first instead of using the last ones read."
+        }
+      }
+    },
+    "import_beacon_settings": {
+      "name": "Import beacon settings",
+      "description": "Apply an exported template to a bin's beacon. The beacon keeps its own name, password, UUID, major and minor; slots and triggers missing from the template are disabled.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "settings": {
+          "name": "Settings",
+          "description": "The `settings` object returned by Export beacon settings."
+        },
+        "allow_other_model": {
+          "name": "Allow a different model",
+          "description": "Apply a template exported from another KBeacon model."
+        }
+      }
+    },
+    "identify_beacon": {
+      "name": "Identify beacon",
+      "description": "Flash the beacon's LED.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long to flash."
+        }
+      }
+    },
+    "reset_beacon": {
+      "name": "Reset beacon",
+      "description": "Factory-reset the beacon's configuration (including its password and UUIDs). The bin will need to be reconfigured.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be on."
+        }
+      }
+    },
+    "power_off_beacon": {
+      "name": "Power off beacon",
+      "description": "Turn the beacon off. Press its button to turn it on again.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be on."
+        }
+      }
+    },
+    "change_beacon_password": {
+      "name": "Change beacon password",
+      "description": "Set a new password (8-16 characters) on the beacon and store it in the bin settings.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "password": {
+          "name": "New password",
+          "description": "8 to 16 characters."
+        }
+      }
     }
   }
 }

@@ -1,0 +1,65 @@
+read_beacon_settings:
+  fields:
+    device_id: &bin_device
+      required: true
+      selector:
+        device:
+          integration: irabelle_waste_management
+write_beacon_settings:
+  fields:
+    device_id: *bin_device
+    settings:
+      required: true
+      example: '{"advObj": [{"slot": 0, "txPwr": -8}]}'
+      selector:
+        object:
+export_beacon_settings:
+  fields:
+    device_id: *bin_device
+    refresh:
+      default: true
+      selector:
+        boolean:
+import_beacon_settings:
+  fields:
+    device_id: *bin_device
+    settings:
+      required: true
+      selector:
+        object:
+    allow_other_model:
+      default: false
+      selector:
+        boolean:
+identify_beacon:
+  fields:
+    device_id: *bin_device
+    duration:
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: s
+reset_beacon:
+  fields:
+    device_id: *bin_device
+    confirm:
+      required: true
+      selector:
+        boolean:
+power_off_beacon:
+  fields:
+    device_id: *bin_device
+    confirm:
+      required: true
+      selector:
+        boolean:
+change_beacon_password:
+  fields:
+    device_id: *bin_device
+    password:
+      required: true
+      selector:
+        text:
+          type: password

@@ -30,6 +30,7 @@ from .const import (
     CALENDAR_REFRESH_MINUTES,
     CONF_ADDRESS,
     CONF_AWAY_MINUTES,
+    CONF_BEACON_PASSWORD,
     CONF_CALENDAR,
     CONF_IDLE_UUID,
     CONF_KEYWORD,
@@ -55,14 +56,19 @@ from .const import (
     SUBENTRY_BIN,
     TICK_SECONDS,
 )
+from .kbeacon.protocol import DEFAULT_PASSWORD
 from .ibeacon import (
     frame_from_service_info,
     kkm_battery_from_service_info,
     normalize_uuid,
 )
+from .beacon import BeaconManager
 from .tracker import BinTracker, TrackerSettings
 
 _LOGGER = logging.getLogger(__name__)
+
+# Seconds after start-up before reading beacons that were never read.
+FIRST_READ_DELAY = 120
 
 DUE_TODAY = "today"
 DUE_TOMORROW = "tomorrow"
@@ -85,6 +91,7 @@ class Bin:
     signal_updated: datetime | None = None
     in_range: bool = False
     moving: bool = False
+    password: str = DEFAULT_PASSWORD
 
     def frame_kind(self, uuid: str) -> str | None:
         """Classify a frame from this bin's MAC as 'idle', 'motion' or None."""
@@ -121,6 +128,7 @@ class WasteHub:
         self._calendar_errors: set[str] = set()
         self._calendar_refresh_pending = False
         self._battery_retry: CALLBACK_TYPE | None = None
+        self.beacons = BeaconManager(hass, self)
 
         settings = TrackerSettings(
             window_start=dt_util.parse_time(hub_option(entry, CONF_WINDOW_START)),
@@ -148,12 +156,14 @@ class WasteHub:
                 calendar=data.get(CONF_CALENDAR) or None,
                 keyword=(data.get(CONF_KEYWORD) or "").strip().casefold(),
                 tracker=BinTracker(settings=settings, started_at=started),
+                password=data.get(CONF_BEACON_PASSWORD) or DEFAULT_PASSWORD,
             )
 
     # -- lifecycle --------------------------------------------------------
 
     async def async_setup(self) -> None:
         """Restore state and start listening."""
+        await self.beacons.async_load()
         stored = await self._store.async_load() or {}
         for bin_ in self.bins.values():
             if saved := stored.get(bin_.subentry_id):
@@ -191,6 +201,18 @@ class WasteHub:
             )
         )
         self._unsubs.append(async_at_started(self.hass, self._async_battery_sweep))
+
+        @callback
+        def _first_read(_hass: HomeAssistant) -> None:
+            @callback
+            def _later(_now: datetime) -> None:
+                self.entry.async_create_background_task(
+                    self.hass, self.beacons.async_read_missing(), f"{DOMAIN} first read"
+                )
+
+            self._unsubs.append(async_call_later(self.hass, FIRST_READ_DELAY, _later))
+
+        self._unsubs.append(async_at_started(self.hass, _first_read))
         # Calendars may not exist yet, or not have loaded their data, while
         # Home Assistant starts: refresh again whenever one of them changes.
         if calendars := sorted({b.calendar for b in self.bins.values() if b.calendar}):
@@ -378,6 +400,11 @@ class WasteHub:
             )
 
     # -- notifications and persistence -----------------------------------
+
+    @callback
+    def async_bin_changed(self, bin_: Bin) -> None:
+        """Push a bin's new state to its entities and save it."""
+        self._bin_changed(bin_)
 
     @callback
     def _bin_changed(self, bin_: Bin) -> None:
