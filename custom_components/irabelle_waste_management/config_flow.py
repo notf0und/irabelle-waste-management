@@ -75,6 +75,8 @@ from .kbeacon.identity import (
 from .kbeacon.protocol import DEFAULT_PASSWORD, validate_password
 
 DEFAULT_TITLE = "Irabelle Waste Management"
+# Active sweep before listing beacons (refreshes names and battery levels).
+DISCOVERY_SCAN_SECONDS = 5
 KKM_DEFAULT_UUID = "7777772E-6B6B-6D63-6E2E-636F6D000001"
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
@@ -181,6 +183,7 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
         self._seen: dict[str, tuple[IBeaconFrame, str | None, int | None]] = {}
         self._read: dict[str, Any] | None = None
         self._offer_skip = False
+        self._scanned = False
 
     # -- add ---------------------------------------------------------------
 
@@ -188,6 +191,14 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Pick the beacon, name the bin; then read the beacon."""
+        if user_input is None and not self._scanned:
+            # Proxies scan passively: names (KKM sends them in the scan
+            # response) and batteries are only fresh after an active sweep.
+            self._scanned = True
+            try:
+                await bluetooth.async_request_active_scan(self.hass, DISCOVERY_SCAN_SECONDS)
+            except Exception:  # noqa: BLE001 - discovery still works without it
+                pass
         configured = {
             sub.data[CONF_ADDRESS].upper()
             for sub in self._get_entry().subentries.values()

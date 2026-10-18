@@ -200,7 +200,7 @@ async def test_bin_settings_keeps_password_and_uuids(k4p) -> None:
 
 @pytest.fixture
 def add_flow(k4p, monkeypatch):
-    state = {"cfg": copy.deepcopy(k4p), "fail": False, "log": []}
+    state = {"cfg": copy.deepcopy(k4p), "fail": False, "log": [], "scans": []}
 
     async def fake_session(hass, address, password, name, action):
         state["log"].append((address, password))
@@ -217,6 +217,11 @@ def add_flow(k4p, monkeypatch):
         return await action(Beacon())
 
     monkeypatch.setattr(cf, "async_beacon_session", fake_session)
+
+    async def fake_active_scan(hass, duration):
+        state["scans"].append(duration)
+
+    monkeypatch.setattr(cf.bluetooth, "async_request_active_scan", fake_active_scan)
     frame = IBeaconFrame("7777772e-bc57-2928-1e6e-636f6d000005", 5, 5, -59)
     monkeypatch.setattr(cf, "_discovered_ibeacons", lambda hass, exclude: {"BC:57:29:28:1E:6E": (frame, "Aaa123", -40)})
     entry = SimpleNamespace(subentries={})
@@ -235,6 +240,8 @@ async def test_add_bin_reads_identity(add_flow) -> None:
     new, state = add_flow
     flow = new()
     serialized(await flow.async_step_user())
+    serialized(await flow.async_step_user())
+    assert state["scans"] == [cf.DISCOVERY_SCAN_SECONDS]  # one active sweep refreshes names
     result = serialized(await flow.async_step_user({"name": "Glass", "address": "BC:57:29:28:1E:6E"}))
     assert result["step_id"] == "beacon_setup" and "setup_motion" not in str(result["data_schema"].schema)
     result = await flow.async_step_beacon_setup({"uuid": "7777772E-BC57-2928-1E6E-636F6D000005", "majorID": 5, "minorID": 5})
