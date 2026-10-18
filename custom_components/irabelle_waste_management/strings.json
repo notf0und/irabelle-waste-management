@@ -71,14 +71,16 @@
             "motion_uuid": "Motion UUID",
             "calendar_entity": "Collection calendar",
             "calendar_keyword": "Calendar keyword",
-            "beacon_password": "Beacon password"
+            "beacon_password": "Beacon password",
+            "battery_capacity": "Battery capacity"
           },
           "data_description": {
             "idle_uuid": "The UUID the beacon advertises while it is still.",
             "motion_uuid": "The UUID it advertises when it moves. `auto` treats any other iBeacon UUID from this MAC as motion.",
             "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
             "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
-            "beacon_password": "Optional. Only needed to configure the beacon from Home Assistant; empty means KKM's default 0000000000000000."
+            "beacon_password": "Optional. Only needed to configure the beacon from Home Assistant; empty means KKM's default 0000000000000000.",
+            "battery_capacity": "Used for the battery-life estimate (1000 mAh for a CR2477, 220 mAh for a CR2032)."
           }
         },
         "reconfigure": {
@@ -91,10 +93,11 @@
             "beacon_trigger_select": "Beacon: triggers (motion, button…)",
             "beacon_export": "Beacon: export settings",
             "beacon_import": "Beacon: import settings",
-            "beacon_identify": "Beacon: identify (flash LED)",
+            "beacon_identify": "Beacon: identify (beep and flash)",
             "beacon_password": "Beacon: change password",
             "beacon_reset": "Beacon: factory reset",
-            "beacon_power_off": "Beacon: power off"
+            "beacon_power_off": "Beacon: power off",
+            "beacon_power": "Beacon: power profiler (battery life)"
           }
         },
         "bin_settings": {
@@ -105,12 +108,14 @@
             "motion_uuid": "Motion UUID",
             "calendar_entity": "Collection calendar",
             "calendar_keyword": "Calendar keyword",
-            "beacon_password": "Beacon password"
+            "beacon_password": "Beacon password",
+            "battery_capacity": "Battery capacity"
           },
           "data_description": {
             "motion_uuid": "`auto` treats any other iBeacon UUID from this MAC as motion.",
             "calendar_keyword": "Only events whose title contains this text (case-insensitive) count.",
-            "beacon_password": "KBeacon password (8-16 characters), used to configure the beacon. Leave empty to keep the stored one (default 0000000000000000)."
+            "beacon_password": "KBeacon password (8-16 characters), used to configure the beacon. Leave empty to keep the stored one (default 0000000000000000).",
+            "battery_capacity": "Used for the battery-life estimate (1000 mAh for a CR2477, 220 mAh for a CR2032)."
           }
         },
         "beacon_general": {
@@ -223,6 +228,16 @@
           "data": {
             "confirm": "Yes, power this beacon off"
           }
+        },
+        "beacon_power": {
+          "title": "Beacon: power profiler",
+          "description": "Estimated from the beacon's current settings, like KBeacon Pro: about **{current} µA** on average, so a full battery lasts about **{days} days ({years} years)**. Battery now: {battery}.\n\n{breakdown}\n\nLike KBeacon Pro, this leaves out triggered broadcasts (e.g. motion) and time spent connected, and assumes the battery's ideal capacity; cold weather shortens real life.",
+          "data": {
+            "battery_capacity": "Battery capacity"
+          },
+          "data_description": {
+            "battery_capacity": "Capacity of the beacon's cell, e.g. 1000 mAh for a CR2477, 220 mAh for a CR2032. Saved in the bin settings."
+          }
         }
       },
       "error": {
@@ -312,6 +327,20 @@
         "state_attributes": {
           "reported_level": {
             "name": "Reported level"
+          }
+        }
+      },
+      "battery_life": {
+        "name": "Battery life",
+        "state_attributes": {
+          "average_current_ua": {
+            "name": "Average current (µA)"
+          },
+          "full_battery_life_days": {
+            "name": "Life on a full battery (days)"
+          },
+          "battery_capacity_mah": {
+            "name": "Battery capacity (mAh)"
           }
         }
       }

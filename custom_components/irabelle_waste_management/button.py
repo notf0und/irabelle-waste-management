@@ -5,9 +5,11 @@ from __future__ import annotations
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import WasteConfigEntry
+from .const import DOMAIN
 from .entity import BinEntity
 from .hub import Bin, WasteHub
 
@@ -19,15 +21,21 @@ async def async_setup_entry(
 ) -> None:
     """Add the beacon buttons of every bin."""
     hub = entry.runtime_data
+    registry = er.async_get(hass)
     for bin_ in hub.bins.values():
-        async_add_entities(
-            [IdentifyButton(hub, bin_), ReadSettingsButton(hub, bin_)],
-            config_subentry_id=bin_.subentry_id,
-        )
+        buttons: list[ButtonEntity] = [ReadSettingsButton(hub, bin_)]
+        if hub.beacons.supports_identify(bin_):
+            buttons.append(IdentifyButton(hub, bin_))
+        elif entity_id := registry.async_get_entity_id(
+            "button", DOMAIN, f"{bin_.subentry_id}_identify"
+        ):
+            # Created before we knew the beacon cannot ring.
+            registry.async_remove(entity_id)
+        async_add_entities(buttons, config_subentry_id=bin_.subentry_id)
 
 
 class IdentifyButton(BinEntity, ButtonEntity):
-    """Flash the beacon's LED for 10 seconds."""
+    """Ring the beacon (beep and LED) for 10 seconds."""
 
     _attr_entity_category = EntityCategory.CONFIG
 

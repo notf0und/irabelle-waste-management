@@ -26,6 +26,7 @@ CONF_MOTION_UUID: Final = "motion_uuid"
 CONF_CALENDAR: Final = "calendar_entity"
 CONF_KEYWORD: Final = "calendar_keyword"
 CONF_BEACON_PASSWORD: Final = "beacon_password"
+CONF_BATTERY_CAPACITY: Final = "battery_capacity"
 
 # Any iBeacon frame from the bin's MAC whose UUID is not the idle UUID.
 MOTION_UUID_AUTO: Final = "auto"

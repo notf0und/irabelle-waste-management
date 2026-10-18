@@ -30,8 +30,15 @@ from homeassistant.helpers.selector import (
 )
 
 from .beacon import BeaconError, BeaconImportError
-from .const import CONF_BEACON_PASSWORD, CONF_IDLE_UUID, CONF_MOTION_UUID, MOTION_UUID_AUTO
+from .const import (
+    CONF_BATTERY_CAPACITY,
+    CONF_BEACON_PASSWORD,
+    CONF_IDLE_UUID,
+    CONF_MOTION_UUID,
+    MOTION_UUID_AUTO,
+)
 from .kbeacon import capabilities as caps
+from .kbeacon.power import estimate as power_estimate
 from .kbeacon.protocol import DEFAULT_PASSWORD, validate_password
 from .kbeacon.settings import export_settings
 
@@ -47,6 +54,7 @@ BEACON_MENU = [
     "beacon_trigger_select",
     "beacon_export",
     "beacon_import",
+    "beacon_power",
     "beacon_identify",
     "beacon_password",
     "beacon_reset",
@@ -127,9 +135,14 @@ class BeaconStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Bin settings plus everything the beacon can be told."""
+        menu = list(BEACON_MENU)
+        found = self._hub_and_bin()
+        if found is None or not found[0].beacons.supports_identify(found[1]):
+            # KBeacon Pro offers no ring/flash on beacons without a beeper.
+            menu.remove("beacon_identify")
         return self.async_show_menu(  # type: ignore[attr-defined]
             step_id="reconfigure",
-            menu_options=BEACON_MENU,
+            menu_options=menu,
             description_placeholders={
                 "address": self._get_reconfigure_subentry().data["address"]  # type: ignore[attr-defined]
             },
@@ -523,6 +536,51 @@ class BeaconStepsMixin:
             ),
             errors=errors,
             description_placeholders=placeholders,
+        )
+
+    # -- power profiler -----------------------------------------------------
+
+    async def async_step_beacon_power(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Estimated battery life from the beacon's current settings."""
+        subentry = self._get_reconfigure_subentry()  # type: ignore[attr-defined]
+        if user_input is not None:
+            capacity = float(user_input[CONF_BATTERY_CAPACITY])
+            return self.async_update_and_abort(  # type: ignore[attr-defined]
+                self._get_entry(), subentry,  # type: ignore[attr-defined]
+                data={**subentry.data, CONF_BATTERY_CAPACITY: capacity},
+            )
+        if (abort := await self._load()) is not None:
+            return abort
+        hub, bin_ = self._hub_and_bin()  # type: ignore[misc]
+        result = power_estimate(self._common(), bin_.capacity_mah)
+        lines = []
+        for slot in result["slots"]:
+            what = "only when triggered" if slot["trigger_only"] else (
+                f"{slot['interval_ms']:g} ms at {slot['tx_power']} dBm"
+                f"{', connectable' if slot['connectable'] else ''}"
+            )
+            lines.append(f"- Slot {slot['slot']}: {what} → {slot['current_ua']} µA")
+        lines.append(f"- Sleep: {result['sleep_ua']} µA")
+        if result["accelerometer_ua"]:
+            lines.append(f"- Accelerometer (motion trigger): {result['accelerometer_ua']} µA")
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="beacon_power",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_BATTERY_CAPACITY, default=bin_.capacity_mah
+                    ): _number(10, 20000, 10, "mAh"),
+                }
+            ),
+            description_placeholders={
+                "current": f"{result['average_current_ua']}",
+                "days": f"{result['life_days']}",
+                "years": f"{result['life_years']}",
+                "breakdown": "\n".join(lines),
+                "battery": str(self._common().get("btPt", "?")),
+            },
         )
 
     # -- actions ------------------------------------------------------------

@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfTime,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
 )
@@ -46,6 +47,7 @@ async def async_setup_entry(
             BinLastSeenSensor(hub, bin_),
             BinSignalSensor(hub, bin_),
             BinBatterySensor(hub, bin_),
+            BinBatteryLifeSensor(hub, bin_),
         ]
         if bin_.calendar:
             entities.append(BinNextCollectionSensor(hub, bin_))
@@ -151,6 +153,43 @@ class BinBatterySensor(BinEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the unclamped value the beacon reports."""
         return {"reported_level": self.bin.tracker.battery_reported}
+
+
+class BinBatteryLifeSensor(BinEntity, SensorEntity):
+    """Estimated remaining battery life (like KBeacon Pro's power profiler)."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_suggested_display_precision = 0
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hub: WasteHub, bin_: Bin) -> None:
+        """Initialise the sensor."""
+        super().__init__(hub, bin_, "battery_life")
+
+    def _estimate(self) -> dict[str, Any] | None:
+        return self.hub.beacons.power_estimate(self.bin)
+
+    @property
+    def native_value(self) -> float | None:
+        """Days left: full-battery life scaled by the battery level."""
+        if (estimate := self._estimate()) is None:
+            return None
+        level = self.bin.tracker.battery()
+        return round(estimate["life_days"] * (level if level is not None else 100) / 100)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Average current and the assumptions behind the estimate."""
+        if (estimate := self._estimate()) is None:
+            return {}
+        return {
+            "average_current_ua": estimate["average_current_ua"],
+            "full_battery_life_days": estimate["life_days"],
+            "battery_capacity_mah": estimate["capacity_mah"],
+            "accelerometer_ua": estimate["accelerometer_ua"],
+            "slots": estimate["slots"],
+        }
 
 
 class BinNextCollectionSensor(BinEntity, SensorEntity):

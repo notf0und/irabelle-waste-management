@@ -42,6 +42,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ADDRESS,
     CONF_AWAY_MINUTES,
+    CONF_BATTERY_CAPACITY,
     CONF_BEACON_PASSWORD,
     CONF_CALENDAR,
     CONF_IDLE_UUID,
@@ -60,6 +61,7 @@ from .const import (
 )
 from .beacon_flow import BeaconStepsMixin
 from .ibeacon import IBeaconFrame, frame_from_service_info, normalize_uuid
+from .kbeacon.power import DEFAULT_CAPACITY_MAH
 from .kbeacon.protocol import validate_password
 
 DEFAULT_TITLE = "Irabelle Waste Management"
@@ -301,6 +303,12 @@ def _details_schema() -> vol.Schema:
             vol.Optional(CONF_BEACON_PASSWORD): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.PASSWORD)
             ),
+            vol.Optional(CONF_BATTERY_CAPACITY, default=DEFAULT_CAPACITY_MAH): NumberSelector(
+                NumberSelectorConfig(
+                    min=10, max=20000, step=10, unit_of_measurement="mAh",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
         }
     )
 
@@ -334,6 +342,9 @@ def _validate_details(
             errors[CONF_BEACON_PASSWORD] = "password_length"
         else:
             data[CONF_BEACON_PASSWORD] = password
+
+    if (capacity := user_input.get(CONF_BATTERY_CAPACITY)) is not None:
+        data[CONF_BATTERY_CAPACITY] = float(capacity)
 
     if calendar := user_input.get(CONF_CALENDAR):
         data[CONF_CALENDAR] = calendar

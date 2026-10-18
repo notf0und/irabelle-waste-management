@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, STORAGE_VERSION
 from .kbeacon.client import KBeaconClient
+from .kbeacon.power import estimate
 from .kbeacon.protocol import KBeaconAuthError, KBeaconError, validate_password
 from .kbeacon.settings import (
     SettingsImportError,
@@ -34,6 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 _T = TypeVar("_T")
 
 CONNECT_ATTEMPTS = 3
+BEEP_CAPABILITY = 0x2  # KBCfgCommon.isSupportBeep
 
 
 class BeaconError(HomeAssistantError):
@@ -92,6 +94,17 @@ class BeaconManager:
                 _LOGGER.warning("%s", err)
             except BeaconError as err:
                 _LOGGER.info("First read of %s skipped: %s", bin_.name, err)
+
+    def power_estimate(self, bin_: Bin) -> dict[str, Any] | None:
+        """Battery-life estimate from the last settings read, if any."""
+        if not (config := self.config(bin_)):
+            return None
+        return estimate(config, bin_.capacity_mah)
+
+    def supports_identify(self, bin_: Bin) -> bool:
+        """True when the beacon reports a beeper (KBeacon Pro offers ring then)."""
+        config = self.config(bin_) or {}
+        return bool(int(config.get("bCap", 0)) & BEEP_CAPABILITY)
 
     def config(self, bin_: Bin) -> dict[str, Any] | None:
         """Last settings read from the bin's beacon, if any."""
@@ -203,7 +216,8 @@ class BeaconManager:
 
     async def async_identify(self, bin_: Bin, seconds: int = 10) -> None:
         """Flash the beacon's LED."""
-        await self._session(bin_, lambda kb: kb.ring(seconds * 1000))
+        ring_type = 0x3 if self.supports_identify(bin_) else 0x2  # beep + LED
+        await self._session(bin_, lambda kb: kb.ring(seconds * 1000, ring_type))
 
     async def async_reset(self, bin_: Bin) -> None:
         """Factory-reset the beacon's configuration."""
