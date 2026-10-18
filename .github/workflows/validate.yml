@@ -22,6 +22,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # No license chosen yet; remove once a LICENSE file is added.
+          ignore: license
 
   tests:
     name: Tests
