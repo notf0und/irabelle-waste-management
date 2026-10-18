@@ -474,6 +474,22 @@
           "emptied": "Emptied"
         }
       }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware",
+        "state_attributes": {
+          "hardware_version": {
+            "name": "Hardware version"
+          },
+          "published_for_hardware": {
+            "name": "KKM publishes firmware for this hardware"
+          },
+          "latest_published": {
+            "name": "Latest published"
+          }
+        }
+      }
     }
   },
   "services": {

@@ -48,6 +48,10 @@ Hub summaries, meant as triggers and conditions for your own automations:
 | `sensor.<hub>_bins_to_bring_back` | Bins that have been emptied |
 | `binary_sensor.<hub>_ready_to_bring_back` | On once at least one bin is emptied and none is still awaiting collection |
 
+## Beacon firmware
+
+Each bin has a **Firmware** update entity: the version on the beacon against the newest firmware KKM publishes for that beacon's *hardware version* (the same catalogue and matching rules as KKM's own updater), so Home Assistant shows an update notice when KKM releases one. The attributes say whether KKM publishes firmware for that hardware at all: newer board revisions often ship with factory firmware that is newer than anything in the public catalogue. Install updates with the KBeacon Pro app for now.
+
 ## Repair notices
 
 The integration raises notices under **Settings → System → Repairs** (they clear themselves once the problem is gone) when:

@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
+
+import aiohttp
 from typing import Any
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
@@ -67,6 +70,7 @@ from .ibeacon import (
 )
 from . import issues
 from .beacon import BeaconManager
+from .kbeacon.firmware import CATALOG_URL, FirmwareStatus, firmware_status
 from .tracker import BinTracker, TrackerSettings
 
 _LOGGER = logging.getLogger(__name__)
@@ -137,6 +141,8 @@ class WasteHub:
         self._calendar_refresh_pending = False
         self._battery_retry: CALLBACK_TYPE | None = None
         self.beacons = BeaconManager(hass, self)
+        # model -> KKM firmware catalogue (None: fetch failed / not published)
+        self.firmware_catalogs: dict[str, dict[str, Any] | None] = {}
 
         settings = TrackerSettings(
             window_start=dt_util.parse_time(hub_option(entry, CONF_WINDOW_START)),
@@ -229,6 +235,19 @@ class WasteHub:
             issues.async_check(self)
 
         issues.async_remove_orphans(self)
+
+        @callback
+        def _refresh_firmware(_now: Any = None) -> None:
+            self.entry.async_create_background_task(
+                self.hass, self.async_refresh_firmware(), f"{DOMAIN} firmware catalogue"
+            )
+
+        self._unsubs.append(
+            async_track_time_interval(self.hass, _refresh_firmware, timedelta(hours=24))
+        )
+        self._unsubs.append(
+            async_call_later(self.hass, FIRST_READ_DELAY + 60, _refresh_firmware)
+        )
         self._unsubs.append(
             async_track_time_interval(self.hass, _check_issues, timedelta(hours=1))
         )
@@ -446,6 +465,35 @@ class WasteHub:
 
     def _data_to_save(self) -> dict[str, Any]:
         return {sid: bin_.tracker.as_dict() for sid, bin_ in self.bins.items()}
+
+    async def async_refresh_firmware(self) -> None:
+        """Fetch KKM's firmware catalogue for every beacon model in use."""
+        models = {
+            config["model"]
+            for bin_ in self.bins.values()
+            if (config := self.beacons.config(bin_)) and config.get("model")
+        }
+        session = async_get_clientsession(self.hass)
+        for model in models:
+            try:
+                async with session.get(
+                    CATALOG_URL.format(model=model), timeout=aiohttp.ClientTimeout(total=20)
+                ) as response:
+                    if response.status == 404:
+                        self.firmware_catalogs[model] = None
+                        continue
+                    response.raise_for_status()
+                    self.firmware_catalogs[model] = await response.json(content_type=None)
+            except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+                _LOGGER.debug("Firmware catalogue for %s unavailable: %s", model, err)
+        for bin_ in self.bins.values():
+            async_dispatcher_send(self.hass, SIGNAL_BIN_UPDATED.format(bin_.subentry_id))
+
+    def firmware(self, bin_: Bin) -> FirmwareStatus | None:
+        """Firmware status of a bin's beacon (None until its settings were read)."""
+        if not (config := self.beacons.config(bin_)):
+            return None
+        return firmware_status(self.firmware_catalogs.get(config.get("model", "")), config)
 
     # -- queries used by the entities ------------------------------------
 
