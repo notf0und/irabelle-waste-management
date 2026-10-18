@@ -15,7 +15,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
-from .const import CONF_BEACON_PASSWORD, DOMAIN
+from .const import CONF_BEACON_PASSWORD, DOMAIN, STATUSES
 
 if TYPE_CHECKING:
     from .hub import Bin, WasteHub
@@ -27,6 +27,19 @@ ATTR_ALLOW_OTHER_MODEL = "allow_other_model"
 ATTR_DURATION = "duration"
 ATTR_CONFIRM = "confirm"
 ATTR_PASSWORD = "password"
+ATTR_STATUS = "status"
+ATTR_SENSOR = "sensor"
+ATTR_NEW_ONLY = "new_only"
+ATTR_MAX_RECORDS = "max_records"
+
+HISTORY_SENSORS = {
+    "temperature_humidity": 0x2,
+    "alarm": 0x8,
+    "pir": 0x10,
+    "light": 0x20,
+    "voc": 0x40,
+    "co2": 0x41,
+}
 
 _DEVICE = {vol.Required(ATTR_DEVICE_ID): cv.string}
 _CONFIRM = {vol.Required(ATTR_CONFIRM): vol.All(cv.boolean, True)}
@@ -92,6 +105,23 @@ def async_setup_services(hass: HomeAssistant) -> None:
             if bin_.password == new_password:
                 _save_password(hass, hub, bin_, new_password)
 
+    async def set_status(call: ServiceCall) -> None:
+        hub, bin_ = _find_bin(hass, call.data[ATTR_DEVICE_ID])
+        hub.async_set_status(bin_, call.data[ATTR_STATUS])
+
+    async def read_history(call: ServiceCall) -> ServiceResponse:
+        hub, bin_ = _find_bin(hass, call.data[ATTR_DEVICE_ID])
+        return await hub.beacons.async_read_history(
+            bin_,
+            HISTORY_SENSORS[call.data[ATTR_SENSOR]],
+            call.data[ATTR_NEW_ONLY],
+            call.data[ATTR_MAX_RECORDS],
+        )
+
+    async def clear_history(call: ServiceCall) -> None:
+        hub, bin_ = _find_bin(hass, call.data[ATTR_DEVICE_ID])
+        await hub.beacons.async_clear_history(bin_, HISTORY_SENSORS[call.data[ATTR_SENSOR]])
+
     def _register(
         name: str,
         handler: Any,
@@ -130,6 +160,23 @@ def async_setup_services(hass: HomeAssistant) -> None:
         identify,
         {**_DEVICE, vol.Optional(ATTR_DURATION, default=10): vol.All(int, vol.Range(1, 60))},
     )
+    _register(
+        "read_beacon_history",
+        read_history,
+        {
+            **_DEVICE,
+            vol.Required(ATTR_SENSOR): vol.In(HISTORY_SENSORS),
+            vol.Optional(ATTR_NEW_ONLY, default=True): cv.boolean,
+            vol.Optional(ATTR_MAX_RECORDS, default=500): vol.All(int, vol.Range(1, 5000)),
+        },
+        SupportsResponse.ONLY,
+    )
+    _register(
+        "clear_beacon_history",
+        clear_history,
+        {**_DEVICE, vol.Required(ATTR_SENSOR): vol.In(HISTORY_SENSORS), **_CONFIRM},
+    )
+    _register("set_bin_status", set_status, {**_DEVICE, vol.Required(ATTR_STATUS): vol.In(STATUSES)})
     _register("reset_beacon", reset, {**_DEVICE, **_CONFIRM})
     _register("power_off_beacon", power_off, {**_DEVICE, **_CONFIRM})
     _register(

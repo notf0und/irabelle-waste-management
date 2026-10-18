@@ -380,7 +380,8 @@
               "idle_advertising": "Normal advertisement heard",
               "no_idle_advertising": "Normal advertisement lost",
               "motion": "Motion in collection window",
-              "window_end_fallback": "Collection window ended"
+              "window_end_fallback": "Collection window ended",
+              "manual": "Set by hand"
             }
           },
           "next_collection": {
@@ -463,6 +464,16 @@
       "read_settings": {
         "name": "Read beacon settings"
       }
+    },
+    "select": {
+      "status_override": {
+        "name": "Set status",
+        "state": {
+          "filling": "Filling",
+          "awaiting_collection": "Awaiting collection",
+          "emptied": "Emptied"
+        }
+      }
     }
   },
   "services": {
@@ -486,7 +497,7 @@
         },
         "settings": {
           "name": "Settings",
-          "description": "For example {\"advObj\": [{\"slot\": 0, \"type\": 5, \"txPwr\": -8}]}."
+          "description": "Settings in the same structure as the read response: common fields plus advObj (slots), trObj (triggers) and srObj (sensors) lists."
         }
       }
     },
@@ -577,6 +588,60 @@
           "description": "8 to 16 characters."
         }
       }
+    },
+    "set_bin_status": {
+      "name": "Set bin status",
+      "description": "Correct a bin's status by hand when detection got it wrong (e.g. it was emptied but no motion was heard). Detection carries on from the new status.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device."
+        },
+        "status": {
+          "name": "Status",
+          "description": "The correct status."
+        }
+      }
+    },
+    "read_beacon_history": {
+      "name": "Read beacon sensor history",
+      "description": "Read the records a sensor beacon has logged (temperature/humidity, light, PIR, alarm, VOC, CO₂). Returns the records as the response. Only for beacons that record history.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "sensor": {
+          "name": "Sensor",
+          "description": "Which sensor's records."
+        },
+        "new_only": {
+          "name": "Only new records",
+          "description": "Only records not read before; off reads the newest records first."
+        },
+        "max_records": {
+          "name": "Maximum records",
+          "description": "Stop after this many records."
+        }
+      }
+    },
+    "clear_beacon_history": {
+      "name": "Clear beacon sensor history",
+      "description": "Delete a sensor's records on the beacon.",
+      "fields": {
+        "device_id": {
+          "name": "Bin",
+          "description": "The bin device whose beacon to use."
+        },
+        "sensor": {
+          "name": "Sensor",
+          "description": "Which sensor's records."
+        },
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be on."
+        }
+      }
     }
   },
   "selector": {
@@ -644,6 +709,37 @@
         "68": "Bluetooth scanner",
         "69": "NFC"
       }
+    },
+    "bin_status": {
+      "options": {
+        "filling": "Filling",
+        "awaiting_collection": "Awaiting collection",
+        "emptied": "Emptied"
+      }
+    },
+    "history_sensor": {
+      "options": {
+        "temperature_humidity": "Temperature & humidity",
+        "light": "Light",
+        "pir": "PIR",
+        "alarm": "Alarm",
+        "voc": "VOC",
+        "co2": "CO₂"
+      }
+    }
+  },
+  "issues": {
+    "beacon_silent": {
+      "title": "{bin}: beacon not heard for {days} days",
+      "description": "No Bluetooth proxy has heard the beacon of **{bin}** for {days} days. Its battery may be flat, or the beacon may have come off the bin or be out of range of every proxy.\n\nThis notice clears itself as soon as the beacon is heard again."
+    },
+    "battery_low": {
+      "title": "{bin}: beacon battery low",
+      "description": "The beacon of **{bin}** reports {battery}% battery, about {days} days of life left at its current settings. Replace the battery soon (or lower the transmit power / slow down advertising in the bin's Configure menu).\n\nThis notice clears itself when the battery is replaced."
+    },
+    "proxy_firmware": {
+      "title": "Bluetooth proxy firmware too old to configure beacons",
+      "description": "These ESPHome Bluetooth proxies run firmware older than {minimum}, which cannot complete Bluetooth connections: **{proxies}**.\n\nBin tracking still works, but configuring beacons from Home Assistant (and other integrations that connect to Bluetooth devices) fails. Update them to ESPHome {minimum} or newer from the ESPHome dashboard."
     }
   }
 }

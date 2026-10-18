@@ -19,6 +19,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, STORAGE_VERSION
+from .issues import async_check_proxies
+from .kbeacon import history
 from .kbeacon.client import KBeaconClient
 from .kbeacon.power import estimate
 from .kbeacon.protocol import KBeaconAuthError, KBeaconError, validate_password
@@ -75,6 +77,8 @@ async def async_beacon_session(
             max_attempts=CONNECT_ATTEMPTS,
         )
     except (BleakError, TimeoutError) as err:
+        # Old ESPHome proxy firmware is the usual culprit: say so in Repairs.
+        async_check_proxies(hass)
         raise BeaconError(f"{name}: could not connect: {err}") from err
     try:
         beacon = KBeaconClient(client, address)
@@ -222,6 +226,48 @@ class BeaconManager:
             return await kb.read_config()
 
         return await self._remember(bin_, await self._session(bin_, _import))
+
+    async def async_read_history(
+        self, bin_: Bin, sensor_type: int, new_only: bool = True, max_records: int = 500
+    ) -> dict[str, Any]:
+        """Read a sensor's recorded history (new records, or all newest first)."""
+        config = self.config(bin_)
+        if config is not None and not history.supports_history(config):
+            raise BeaconError(f"{bin_.name}: this beacon does not record sensor history")
+
+        async def _read(kb: KBeaconClient) -> dict[str, Any]:
+            items = await kb.hex_request(history.info_request(sensor_type))
+            if not items:
+                raise BeaconError(f"{bin_.name}: no reply to the history request")
+            info = history.parse_info(items[0])
+            utc_offset = int(dt_util.utcnow().timestamp()) - info["beacon_utc"]
+            records: list[dict[str, Any]] = []
+            position = history.INVALID_POS
+            order = history.ORDER_NEW if new_only else history.ORDER_REVERSE
+            while len(records) < max_records:
+                batch = min(100, max_records - len(records))
+                items = await kb.hex_request(
+                    history.records_request(sensor_type, position, batch, order)
+                )
+                got = 0
+                for item in items:
+                    page, position = history.parse_records(item, utc_offset)
+                    records += page
+                    got += len(page)
+                if got == 0 or position == history.INVALID_POS:
+                    break
+            return {**info, "records": records[:max_records]}
+
+        try:
+            return await self._session(bin_, _read)
+        except history.HistoryParseError as err:
+            raise BeaconError(f"{bin_.name}: {err}") from err
+
+    async def async_clear_history(self, bin_: Bin, sensor_type: int) -> None:
+        """Delete a sensor's recorded history on the beacon."""
+        await self._session(
+            bin_, lambda kb: kb.hex_request(history.clear_request(sensor_type))
+        )
 
     async def async_identify(self, bin_: Bin, seconds: int = 10) -> None:
         """Flash the beacon's LED."""

@@ -41,6 +41,51 @@ identify_beacon:
           min: 1
           max: 60
           unit_of_measurement: s
+read_beacon_history:
+  fields:
+    device_id: *bin_device
+    sensor: &history_sensor
+      required: true
+      selector:
+        select:
+          options:
+            - temperature_humidity
+            - light
+            - pir
+            - alarm
+            - voc
+            - co2
+          translation_key: history_sensor
+    new_only:
+      default: true
+      selector:
+        boolean:
+    max_records:
+      default: 500
+      selector:
+        number:
+          min: 1
+          max: 5000
+clear_beacon_history:
+  fields:
+    device_id: *bin_device
+    sensor: *history_sensor
+    confirm:
+      required: true
+      selector:
+        boolean:
+set_bin_status:
+  fields:
+    device_id: *bin_device
+    status:
+      required: true
+      selector:
+        select:
+          options:
+            - filling
+            - awaiting_collection
+            - emptied
+          translation_key: bin_status
 reset_beacon:
   fields:
     device_id: *bin_device

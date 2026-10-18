@@ -26,6 +26,8 @@ from .const import (
     STATUS_FILLING,
 )
 
+REASON_MANUAL = "manual"
+
 _STREAK_GAP = timedelta(seconds=IDLE_STREAK_GAP_SECONDS)
 _IN_RANGE = timedelta(seconds=IN_RANGE_SECONDS)
 _MOTION_HOLD = timedelta(seconds=MOTION_HOLD_SECONDS)
@@ -62,7 +64,11 @@ class BinTracker:
 
     def on_idle_frame(self, now: datetime, source: str, rssi: int | None) -> bool:
         """Record an idle advertisement. Return True if the status changed."""
-        if self.last_seen is None or now - self.last_seen > _STREAK_GAP:
+        if (
+            self.idle_streak_start is None
+            or self.last_seen is None
+            or now - self.last_seen > _STREAK_GAP
+        ):
             self.idle_streak_start = now
         self.last_seen = now
         if rssi is not None:
@@ -90,6 +96,9 @@ class BinTracker:
             reference = self.last_seen or self.started_at
             # After a restart, give the bin a full `away` period to be heard.
             reference = max(reference, self.started_at)
+            if self.status_reason == REASON_MANUAL and self.status_since:
+                # A manual correction also restarts the countdown.
+                reference = max(reference, self.status_since)
             if now - reference > self.settings.away:
                 return self._set(STATUS_AWAITING, now, "no_idle_advertising")
 
@@ -109,6 +118,19 @@ class BinTracker:
             return self._set(STATUS_EMPTIED, now, "window_end_fallback")
 
         return False
+
+    def set_manually(self, now: datetime, status: str) -> bool:
+        """Correct the status by hand; detection carries on from there."""
+        if status not in (STATUS_FILLING, STATUS_AWAITING, STATUS_EMPTIED):
+            raise ValueError(status)
+        # Returning to filling needs a fresh stretch of idle frames, so the
+        # correction is not undone by the streak that was already running.
+        self.idle_streak_start = None
+        changed = status != self.status
+        self.status = status
+        self.status_since = now
+        self.status_reason = REASON_MANUAL
+        return changed
 
     # -- derived state ----------------------------------------------------
 

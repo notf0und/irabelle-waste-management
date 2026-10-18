@@ -229,6 +229,9 @@ class RequestState:
     data_type: int = DT_JSON
     buffer: bytearray = field(default_factory=bytearray)
     finished: bool = False
+    # Hex exchanges (sensor history) can return several report items; they
+    # only end when the beacon acknowledges with CMD_COMPLETE (or SUCCESS).
+    items: list[bytes] = field(default_factory=list)
 
     def first(self) -> bytes:
         """The first PDU to write."""
@@ -270,6 +273,8 @@ class RequestState:
         if cause == AckCause.SUCCESS:
             if data:
                 self.buffer[:] = data
+                if self.data_type == DT_HEX:
+                    self.items.append(bytes(data))
             self.finished = True
             return []
         if cause == AckCause.CMD_COMPLETE:
@@ -291,14 +296,24 @@ class RequestState:
             if offset != len(self.buffer) or len(self.buffer) + len(payload) > MAX_BUFFER:
                 return [report_ack(len(self.buffer), data_type, cause=1)]
             self.buffer += payload
+            ack = report_ack(len(self.buffer), data_type)
             if tag == TAG_END:
-                self.finished = True
-            return [report_ack(len(self.buffer), data_type)]
+                self._complete_item(data_type)
+            return [ack]
         if tag == TAG_SINGLE:
             self.buffer += payload
-            self.finished = True
-            return [report_ack(len(self.buffer), data_type)]
+            ack = report_ack(len(self.buffer), data_type)
+            self._complete_item(data_type)
+            return [ack]
         return []
+
+    def _complete_item(self, data_type: int) -> None:
+        if data_type == DT_HEX_REPORT:
+            # More items may follow; the exchange ends with CMD_COMPLETE.
+            self.items.append(bytes(self.buffer))
+            self.buffer.clear()
+        else:
+            self.finished = True
 
     def json(self) -> dict[str, Any]:
         """Decode the reply as JSON (empty dict when there is none)."""

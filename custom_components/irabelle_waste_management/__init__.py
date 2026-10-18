@@ -12,7 +12,12 @@ from .const import DOMAIN
 from .hub import WasteHub
 from .services import async_setup_services
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.SELECT,
+    Platform.SENSOR,
+]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

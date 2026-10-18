@@ -14,6 +14,7 @@ from .protocol import (
     CFG_SENSOR,
     CFG_TRIGGER,
     DT_AUTH,
+    DT_HEX,
     NOTIFY_CHAR_UUID,
     WRITE_CHAR_UUID,
     AuthSession,
@@ -73,7 +74,17 @@ class KBeaconClient:
         self, message: dict[str, Any], timeout: float = REQUEST_TIMEOUT
     ) -> dict[str, Any]:
         """Send a JSON message and return the beacon's JSON reply ({} if none)."""
-        state = RequestState(encode_json(message), self._mtu_payload)
+        state = await self._exchange(RequestState(encode_json(message), self._mtu_payload), timeout)
+        return state.json()
+
+    async def hex_request(self, payload: bytes, timeout: float = 30.0) -> list[bytes]:
+        """Send a binary (sensor) message and return every reply item."""
+        state = await self._exchange(
+            RequestState(payload, self._mtu_payload, data_type=DT_HEX), timeout
+        )
+        return state.items or ([state.response] if state.response else [])
+
+    async def _exchange(self, state: RequestState, timeout: float) -> RequestState:
         # Drop anything left over from a previous exchange.
         while not self._queue.empty():
             self._queue.get_nowait()
@@ -84,7 +95,7 @@ class KBeaconClient:
                 _LOGGER.debug("%s RX %s", self._mac, pdu.hex())
                 for out in state.handle(pdu):
                     await self._write(out)
-        return state.json()
+        return state
 
     # -- high level ---------------------------------------------------------
 

@@ -65,6 +65,7 @@ from .ibeacon import (
     kkm_battery_from_service_info,
     normalize_uuid,
 )
+from . import issues
 from .beacon import BeaconManager
 from .tracker import BinTracker, TrackerSettings
 
@@ -72,6 +73,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Seconds after start-up before reading beacons that were never read.
 FIRST_READ_DELAY = 120
+# Seconds after start-up before the first repair-notice check.
+ISSUE_CHECK_DELAY = 300
 
 DUE_TODAY = "today"
 DUE_TOMORROW = "tomorrow"
@@ -220,6 +223,17 @@ class WasteHub:
             self._unsubs.append(async_call_later(self.hass, FIRST_READ_DELAY, _later))
 
         self._unsubs.append(async_at_started(self.hass, _first_read))
+
+        @callback
+        def _check_issues(_now: Any = None) -> None:
+            issues.async_check(self)
+
+        issues.async_remove_orphans(self)
+        self._unsubs.append(
+            async_track_time_interval(self.hass, _check_issues, timedelta(hours=1))
+        )
+        # Give the proxies a few minutes to hear everything after a restart.
+        self._unsubs.append(async_call_later(self.hass, ISSUE_CHECK_DELAY, _check_issues))
         # Calendars may not exist yet, or not have loaded their data, while
         # Home Assistant starts: refresh again whenever one of them changes.
         if calendars := sorted({b.calendar for b in self.bins.values() if b.calendar}):
@@ -407,6 +421,12 @@ class WasteHub:
             )
 
     # -- notifications and persistence -----------------------------------
+
+    @callback
+    def async_set_status(self, bin_: Bin, status: str) -> None:
+        """Correct a bin's status by hand."""
+        bin_.tracker.set_manually(dt_util.now(), status)
+        self._bin_changed(bin_)
 
     @callback
     def async_bin_changed(self, bin_: Bin) -> None:

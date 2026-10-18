@@ -1,0 +1,52 @@
+{
+ "model": "BC04P",
+ "ver": "V6.65",
+ "hver": "V3.0",
+ "atPwr": 0,
+ "bCap": 3096325,
+ "trCap": 1,
+ "maxPwr": 8,
+ "minPwr": -40,
+ "maxPrd": 40000,
+ "maxSlot": 5,
+ "maxTg": 5,
+ "meaPwr": -59,
+ "btPt": 104,
+ "name": "Recycling Bin",
+ "advObj": [
+  {
+   "slot": 0,
+   "type": 5,
+   "advPrd": 1022.5,
+   "txPwr": -20,
+   "conn": 1,
+   "trAdv": 0,
+   "mode": 0,
+   "chMsk": 0,
+   "uuid": "7777772E-6B6B-6D63-6E2E-636F6D000001",
+   "majorID": 2,
+   "minorID": 2
+  }
+ ],
+ "trObj": [
+  {
+   "trIdx": 0,
+   "trType": 1,
+   "trAct": 1,
+   "slot": 0,
+   "trAChg": 1,
+   "trATm": 30,
+   "trAPrd": 1000,
+   "trAPwr": 8,
+   "trPara": 102,
+   "odr": 2,
+   "ocnt": 1
+  }
+ ],
+ "srObj": [
+  {
+   "srType": 1,
+   "model": 2
+  }
+ ]
+}

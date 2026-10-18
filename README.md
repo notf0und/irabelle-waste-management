@@ -37,6 +37,8 @@ Per bin (one device each):
 | `sensor.<bin>_signal`, `sensor.<bin>_last_seen` | Diagnostics: strongest proxy RSSI, last idle advertisement |
 | `sensor.<bin>_battery` | Battery % from the KKM extension data (service data `0x2080`, sent in the scan response even in iBeacon mode). Fresh batteries report above 100 and are shown as 100%, like the KBeacon app; the raw value is the `reported_level` attribute. Home Assistant runs ESPHome proxies passively by default, so the integration asks for a 10 s active sweep at startup and every 6 h (every 30 min while a bin has no reading yet). |
 
+Per bin you also get a **Set status** selector (and the `irabelle_waste_management.set_bin_status` action) to correct the status by hand when detection got it wrong, e.g. the bin was emptied but the truck's lift was not heard. Detection carries on from the corrected status.
+
 Hub summaries, meant as triggers and conditions for your own automations:
 
 | Entity | Description |
@@ -45,6 +47,14 @@ Hub summaries, meant as triggers and conditions for your own automations:
 | `sensor.<hub>_bins_awaiting_collection` | Bins at the kerb, not emptied yet |
 | `sensor.<hub>_bins_to_bring_back` | Bins that have been emptied |
 | `binary_sensor.<hub>_ready_to_bring_back` | On once at least one bin is emptied and none is still awaiting collection |
+
+## Repair notices
+
+The integration raises notices under **Settings → System → Repairs** (they clear themselves once the problem is gone) when:
+
+- a bin's beacon has not been heard for 3 days (flat battery, beacon came off, out of range);
+- a beacon's battery is at 20 % or below, or has less than 90 days of estimated life left;
+- a connectable ESPHome Bluetooth proxy runs firmware older than 2026.8.0, which cannot configure beacons.
 
 ## Configure the beacons from Home Assistant
 
@@ -62,9 +72,9 @@ KKM KBeacon / KBeacon Pro beacons (tested with the K4P and BC04P) can be configu
 | Beacon: power profiler | Estimated average current and battery life from the beacon's settings, like KBeacon Pro (regular advertising only; triggered broadcasts and connections excluded). Set the cell's capacity here (default 1000 mAh, a CR2477) |
 | Beacon: identify, change password, factory reset, power off | Identify (beep + LED) only appears for beacons with a beeper. Reset and power off ask for confirmation |
 
-Only the options the beacon reports as supported are offered. Reading sensor history logs is not implemented yet (none of the tested beacons record history). Each screen reads the beacon first, so keep it near a proxy. Changing the UUID of the bin's idle advertisement updates the bin automatically.
+Only the options the beacon reports as supported are offered. Beacons that record sensor history (temperature & humidity, light, PIR, alarm, VOC, CO₂ models) can be read with the `read_beacon_history` action (returns the records) and cleared with `clear_beacon_history`. Each screen reads the beacon first, so keep it near a proxy. Changing the UUID of the bin's idle advertisement updates the bin automatically.
 
-Every bin also gets a **Battery life** sensor (estimated days left), a **Read beacon settings** button, an **Identify** button on beacons that can beep, (model, firmware and hardware version appear on the device page), and the same operations are available as actions for scripts: `irabelle_waste_management.read_beacon_settings`, `write_beacon_settings`, `export_beacon_settings`, `import_beacon_settings`, `identify_beacon`, `change_beacon_password`, `reset_beacon`, `power_off_beacon`.
+Every bin also gets a **Battery life** sensor (estimated days left), a **Read beacon settings** button, an **Identify** button on beacons that can beep, (model, firmware and hardware version appear on the device page), and the same operations are available as actions for scripts: `irabelle_waste_management.read_beacon_settings`, `write_beacon_settings`, `export_beacon_settings`, `import_beacon_settings`, `identify_beacon`, `change_beacon_password`, `reset_beacon`, `power_off_beacon`, `read_beacon_history`, `clear_beacon_history`, `set_bin_status`.
 
 Requirements:
 
@@ -269,3 +279,14 @@ actions:
         is still at home!
 mode: single
 ```
+
+## Development
+
+Tests cover the bin state machine, the KBeacon protocol (login, framing, sensor history), settings templates, the power profiler (checked against KBeacon Pro's own figures) and every configuration screen, using configurations captured from real K4P and BC04P beacons:
+
+```bash
+pip install -r requirements_test.txt
+python -m pytest
+```
+
+Every push runs Home Assistant's hassfest, the HACS validation and the tests.
