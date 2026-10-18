@@ -31,6 +31,7 @@ from .const import (
     CONF_ADDRESS,
     CONF_AWAY_MINUTES,
     CONF_BATTERY_CAPACITY,
+    CONF_BATTERY_EFFICIENCY,
     CONF_BEACON_PASSWORD,
     CONF_CALENDAR,
     CONF_IDLE_UUID,
@@ -57,7 +58,7 @@ from .const import (
     SUBENTRY_BIN,
     TICK_SECONDS,
 )
-from .kbeacon.power import DEFAULT_CAPACITY_MAH
+from .kbeacon.power import DEFAULT_CAPACITY_MAH, DEFAULT_EFFICIENCY
 from .kbeacon.protocol import DEFAULT_PASSWORD
 from .ibeacon import (
     frame_from_service_info,
@@ -95,6 +96,7 @@ class Bin:
     moving: bool = False
     password: str = DEFAULT_PASSWORD
     capacity_mah: float = DEFAULT_CAPACITY_MAH
+    efficiency: float = DEFAULT_EFFICIENCY
 
     def frame_kind(self, uuid: str) -> str | None:
         """Classify a frame from this bin's MAC as 'idle', 'motion' or None."""
@@ -161,6 +163,7 @@ class WasteHub:
                 tracker=BinTracker(settings=settings, started_at=started),
                 password=data.get(CONF_BEACON_PASSWORD) or DEFAULT_PASSWORD,
                 capacity_mah=float(data.get(CONF_BATTERY_CAPACITY) or DEFAULT_CAPACITY_MAH),
+                efficiency=float(data.get(CONF_BATTERY_EFFICIENCY) or DEFAULT_EFFICIENCY),
             )
 
     # -- lifecycle --------------------------------------------------------

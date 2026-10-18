@@ -32,6 +32,7 @@ from homeassistant.helpers.selector import (
 from .beacon import BeaconError, BeaconImportError
 from .const import (
     CONF_BATTERY_CAPACITY,
+    CONF_BATTERY_EFFICIENCY,
     CONF_BEACON_PASSWORD,
     CONF_IDLE_UUID,
     CONF_MOTION_UUID,
@@ -77,6 +78,11 @@ def _number(low: float, high: float, step: float | str = 1, unit: str | None = N
     if unit:
         config["unit_of_measurement"] = unit
     return NumberSelector(config)
+
+
+def _ma(microamps: float) -> str:
+    """Format like KBeacon Pro (mA with 5 decimals)."""
+    return f"{microamps / 1000:.5f} mA"
 
 
 class BeaconStepsMixin:
@@ -543,43 +549,64 @@ class BeaconStepsMixin:
     async def async_step_beacon_power(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Estimated battery life from the beacon's current settings."""
+        """KBeacon Pro's power profiler: average current and battery life."""
         subentry = self._get_reconfigure_subentry()  # type: ignore[attr-defined]
         if user_input is not None:
-            capacity = float(user_input[CONF_BATTERY_CAPACITY])
             return self.async_update_and_abort(  # type: ignore[attr-defined]
                 self._get_entry(), subentry,  # type: ignore[attr-defined]
-                data={**subentry.data, CONF_BATTERY_CAPACITY: capacity},
+                data={
+                    **subentry.data,
+                    CONF_BATTERY_CAPACITY: float(user_input[CONF_BATTERY_CAPACITY]),
+                    CONF_BATTERY_EFFICIENCY: float(user_input[CONF_BATTERY_EFFICIENCY]),
+                },
             )
         if (abort := await self._load()) is not None:
             return abort
-        hub, bin_ = self._hub_and_bin()  # type: ignore[misc]
-        result = power_estimate(self._common(), bin_.capacity_mah)
-        lines = []
+        _hub, bin_ = self._hub_and_bin()  # type: ignore[misc]
+        config = self._common()
+        result = power_estimate(config, bin_.capacity_mah, bin_.efficiency)
+        names = caps.ADV_TYPES
+        lines = [f"- Adv standby: {_ma(result['standby_ua'])}"]
         for slot in result["slots"]:
-            what = "only when triggered" if slot["trigger_only"] else (
-                f"{slot['interval_ms']:g} ms at {slot['tx_power']} dBm"
-                f"{', connectable' if slot['connectable'] else ''}"
+            lines.append(
+                f"- Adv slot {slot['slot']} ({names.get(slot['type'], '?')}, "
+                f"{slot['interval_ms']:g} ms, {slot['tx_power']} dBm): {_ma(slot['current_ua'])}"
             )
-            lines.append(f"- Slot {slot['slot']}: {what} → {slot['current_ua']} µA")
-        lines.append(f"- Sleep: {result['sleep_ua']} µA")
-        if result["accelerometer_ua"]:
-            lines.append(f"- Accelerometer (motion trigger): {result['accelerometer_ua']} µA")
+        for trigger in result["triggered_advertising"]:
+            lines.append(
+                f"- Trigger adv slot {trigger['slot']} "
+                f"({caps.TRIGGER_TYPES.get(trigger['type'], '?')}): {_ma(trigger['current_ua'])} "
+                "(not in the average)"
+            )
+        if result["accelerometer_standby_ua"]:
+            lines.append(f"- Acc standby: {_ma(result['accelerometer_standby_ua'])}")
+        if result["motion_sampling_ua"]:
+            odr = next(
+                (t.get("odr") for t in config.get("trObj", []) if t.get("trType") == 1), 2
+            )
+            lines.append(
+                f"- Acc motion trigger ({caps.ACC_ODR.get(int(odr), '?')}): "
+                f"{_ma(result['motion_sampling_ua'])}"
+            )
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="beacon_power",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_BATTERY_CAPACITY, default=bin_.capacity_mah
-                    ): _number(10, 20000, 10, "mAh"),
+                    vol.Required(CONF_BATTERY_CAPACITY, default=bin_.capacity_mah): _number(
+                        10, 20000, 10, "mAh"
+                    ),
+                    vol.Required(CONF_BATTERY_EFFICIENCY, default=bin_.efficiency): _number(
+                        10, 100, 1, "%"
+                    ),
                 }
             ),
             description_placeholders={
-                "current": f"{result['average_current_ua']}",
-                "days": f"{result['life_days']}",
-                "years": f"{result['life_years']}",
                 "breakdown": "\n".join(lines),
-                "battery": str(self._common().get("btPt", "?")),
+                "current": f"{result['average_current_ua'] / 1000:.4f}",
+                "months": f"{result['life_months']}",
+                "efficiency": f"{result['efficiency']:g}",
+                "capacity": f"{result['capacity_mah']:g}",
+                "battery": str(config.get("btPt", "?")),
             },
         )
 

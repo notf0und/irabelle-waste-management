@@ -231,12 +231,14 @@
         },
         "beacon_power": {
           "title": "Beacon: power profiler",
-          "description": "Estimated from the beacon's current settings, like KBeacon Pro: about **{current} µA** on average, so a full battery lasts about **{days} days ({years} years)**. Battery now: {battery}.\n\n{breakdown}\n\nLike KBeacon Pro, this leaves out triggered broadcasts (e.g. motion) and time spent connected, and assumes the battery's ideal capacity; cold weather shortens real life.",
+          "description": "Battery capacity {capacity} mAh, battery now {battery}%.\n\n{breakdown}\n\n**Average current: {current} mA**\n**Estimated battery life: {months} months** (capacity × {efficiency}% efficiency ÷ average current ÷ 24 h ÷ 30 days)\n\nAs in KBeacon Pro, triggered advertising and time spent connected are not included.",
           "data": {
-            "battery_capacity": "Battery capacity"
+            "battery_capacity": "Battery capacity",
+            "battery_efficiency": "Battery efficiency"
           },
           "data_description": {
-            "battery_capacity": "Capacity of the beacon's cell, e.g. 1000 mAh for a CR2477, 220 mAh for a CR2032. Saved in the bin settings."
+            "battery_capacity": "1000 mAh for a CR2477, 220 mAh for a CR2032.",
+            "battery_efficiency": "Share of the capacity actually usable; KKM recommends 75%."
           }
         }
       },
@@ -336,11 +338,14 @@
           "average_current_ua": {
             "name": "Average current (µA)"
           },
-          "full_battery_life_days": {
-            "name": "Life on a full battery (days)"
-          },
           "battery_capacity_mah": {
             "name": "Battery capacity (mAh)"
+          },
+          "full_battery_life_months": {
+            "name": "Life on a full battery (months)"
+          },
+          "battery_efficiency": {
+            "name": "Battery efficiency (%)"
           }
         }
       }

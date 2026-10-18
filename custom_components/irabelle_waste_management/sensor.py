@@ -185,10 +185,14 @@ class BinBatteryLifeSensor(BinEntity, SensorEntity):
             return {}
         return {
             "average_current_ua": estimate["average_current_ua"],
-            "full_battery_life_days": estimate["life_days"],
+            "full_battery_life_months": estimate["life_months"],
             "battery_capacity_mah": estimate["capacity_mah"],
-            "accelerometer_ua": estimate["accelerometer_ua"],
+            "battery_efficiency": estimate["efficiency"],
+            "standby_ua": estimate["standby_ua"],
+            "accelerometer_standby_ua": estimate["accelerometer_standby_ua"],
+            "motion_sampling_ua": estimate["motion_sampling_ua"],
             "slots": estimate["slots"],
+            "triggered_advertising": estimate["triggered_advertising"],
         }
 
 

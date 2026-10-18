@@ -99,7 +99,7 @@ class BeaconManager:
         """Battery-life estimate from the last settings read, if any."""
         if not (config := self.config(bin_)):
             return None
-        return estimate(config, bin_.capacity_mah)
+        return estimate(config, bin_.capacity_mah, bin_.efficiency)
 
     def supports_identify(self, bin_: Bin) -> bool:
         """True when the beacon reports a beeper (KBeacon Pro offers ring then)."""
