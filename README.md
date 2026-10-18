@@ -75,21 +75,44 @@ Requirements:
 
 Each bin can point at any Home Assistant **calendar** entity plus a keyword matched against the event title (case-insensitive), so the source of the schedule does not matter:
 
-- A council integration, for example [Waste Collection Schedule](https://github.com/mampfes/hacs_waste_collection_schedule), which exposes a calendar per source.
-- A fixed schedule with the Waste Collection Schedule `static` source, for example residual every Thursday with glass and plastics on alternate Thursdays:
-
-  ```yaml
-  - name: static
-    args: { type: Residual, frequency: WEEKLY, weekdays: TH }
-  - name: static
-    args: { type: Glass, frequency: WEEKLY, interval: 2, weekdays: TH, start: "2026-10-01" }
-  - name: static
-    args: { type: Plastics, frequency: WEEKLY, interval: 2, weekdays: TH, start: "2026-10-08" }
-  ```
-
-- Home Assistant's **Local Calendar** with repeating events, if you prefer to edit the schedule in the UI.
+- **A council API**, for example [Waste Collection Schedule](https://github.com/mampfes/hacs_waste_collection_schedule), which exposes a calendar per source.
+- **A fixed schedule** (no API), with Home Assistant's built-in **Local Calendar** — see below.
 
 The calendar is only used for the next-collection date and the *bins to take out* summary. The bin status itself comes from the beacon alone.
+
+### Fixed schedule with Local Calendar (step by step)
+
+Example rotation: residual every Thursday, glass and plastics on alternate Thursdays.
+
+1. **Create the calendar** (once): **Settings → Devices & services → Add integration → Local Calendar**, name it e.g. `Bin collections` (this creates `calendar.bin_collections`).
+2. **Add one repeating event per bin type**: open **Calendar** in the sidebar, select *Bin collections* and click **+ Add event**:
+
+   | Event title | Start date | All day | Repeat |
+   | --- | --- | --- | --- |
+   | `Residual` | the next collection Thursday | yes | Weekly, every **1** week, on Thursday |
+   | `Glass` | the next Thursday glass goes out | yes | Weekly, every **2** weeks, on Thursday |
+   | `Plastics` | the Thursday *after* that one | yes | Weekly, every **2** weeks, on Thursday |
+
+   - The title only has to **contain** the bin's keyword (case-insensitive): `Residual`, `Residual bin` and `residual collection` all match `residual`.
+   - Use **all-day** events: only the date matters.
+   - Other patterns: "1st and 3rd Thursday of the month" = two events, **Monthly → first Thursday** and **Monthly → third Thursday**.
+3. **Link each bin**: in **Add bin** (or the bin's **⋮ → Configure → Bin settings**) choose **Collection calendar** `calendar.bin_collections` and the **Calendar keyword** (`residual`, `glass`, `plastics`). One calendar serves all bins; the keyword tells them apart.
+4. **Check**: each bin's **Next collection** sensor shows the right date within seconds (the calendar is re-read whenever it changes, and every 30 minutes). The evening before a collection, `sensor.<hub>_bins_to_take_out` lists the bins due tomorrow that are still at home.
+
+**Holidays / one-off changes**: click the affected occurrence in the calendar and edit or delete **only this event** (e.g. move it to Friday); the integration follows automatically.
+
+### Fixed schedule with Waste Collection Schedule
+
+If Waste Collection Schedule is already installed, its `static` source does the same with recurrence rules and exposes a calendar to point the bins at:
+
+```yaml
+- name: static
+  args: { type: Residual, frequency: WEEKLY, weekdays: TH }
+- name: static
+  args: { type: Glass, frequency: WEEKLY, interval: 2, weekdays: TH, start: "2026-10-01" }
+- name: static
+  args: { type: Plastics, frequency: WEEKLY, interval: 2, weekdays: TH, start: "2026-10-08" }
+```
 
 ## Installation
 
