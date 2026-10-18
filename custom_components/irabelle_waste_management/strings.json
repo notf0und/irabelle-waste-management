@@ -406,7 +406,19 @@
         "name": "Signal"
       },
       "next_collection": {
-        "name": "Next collection"
+        "name": "Next collection",
+        "state_attributes": {
+          "date": {
+            "name": "Date"
+          },
+          "due": {
+            "name": "Due",
+            "state": {
+              "today": "Today",
+              "tomorrow": "Tomorrow"
+            }
+          }
+        }
       },
       "bins_to_take_out": {
         "name": "Bins to take out",

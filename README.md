@@ -33,7 +33,7 @@ Per bin (one device each):
 | `binary_sensor.<bin>_motion` | On while the motion advertisement is heard |
 | `binary_sensor.<bin>_in_range` | On while the idle advertisement is heard |
 | `sensor.<bin>_last_motion` | Last motion advertisement |
-| `sensor.<bin>_next_collection` | Next collection date (only when a calendar is set) |
+| `sensor.<bin>_next_collection` | Next collection (only when a calendar is set): a timestamp at the start of the collection window, so it is shown in your date format; the plain date is the `date` attribute |
 | `sensor.<bin>_signal`, `sensor.<bin>_last_seen` | Diagnostics: strongest proxy RSSI, last idle advertisement |
 | `sensor.<bin>_battery` | Battery % from the KKM extension data (service data `0x2080`, sent in the scan response even in iBeacon mode). Fresh batteries report above 100 and are shown as 100%, like the KBeacon app; the raw value is the `reported_level` attribute. Home Assistant runs ESPHome proxies passively by default, so the integration asks for a 10 s active sweep at startup and every 6 h (every 30 min while a bin has no reading yet). |
 

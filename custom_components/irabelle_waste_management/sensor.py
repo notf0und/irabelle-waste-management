@@ -19,6 +19,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import WasteConfigEntry
 from .const import DOMAIN, STATUS_AWAITING, STATUS_EMPTIED, STATUSES
@@ -197,23 +198,35 @@ class BinBatteryLifeSensor(BinEntity, SensorEntity):
 
 
 class BinNextCollectionSensor(BinEntity, SensorEntity):
-    """Next collection date from the bin's calendar."""
+    """Next collection, as the start of the collection window that day.
 
-    _attr_device_class = SensorDeviceClass.DATE
+    A timestamp (not a date) because Home Assistant's frontend only formats
+    timestamp sensors with the user's date settings; date sensors are shown
+    as raw ISO text.
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(self, hub: WasteHub, bin_: Bin) -> None:
         """Initialise the sensor."""
         super().__init__(hub, bin_, "next_collection")
 
     @property
-    def native_value(self) -> date | None:
-        """Return the next collection date."""
-        return self.bin.next_collection
+    def native_value(self) -> datetime | None:
+        """Collection day at the start of the collection window (local time)."""
+        if (day := self.bin.next_collection) is None:
+            return None
+        return datetime.combine(
+            day, self.hub.settings.window_start, tzinfo=dt_util.get_default_time_zone()
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose whether it is due today or tomorrow."""
-        return {"due": self.hub.due(self.bin)}
+        """The date itself and whether it is due today or tomorrow."""
+        return {
+            "date": self.bin.next_collection.isoformat() if self.bin.next_collection else None,
+            "due": self.hub.due(self.bin),
+        }
 
 
 def _summary_attributes(hub: WasteHub, bins: list[Bin]) -> dict[str, Any]:
