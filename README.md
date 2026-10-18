@@ -133,43 +133,138 @@ Install the integration only once and add every bin to the same hub. Use the bin
 
 ## Example automations
 
-Reminder at 19:00 the evening before:
+These use the hub entities (with the default hub name *Irabelle Waste Management*; adjust the entity ids if you renamed it):
+
+| Entity | Use |
+| --- | --- |
+| `sensor.irabelle_waste_management_bins_to_take_out` | Bins due today/tomorrow that are still at home; attribute `due` maps each bin name to `today`/`tomorrow` |
+| `sensor.irabelle_waste_management_bins_to_bring_back` | Emptied bins; attribute `bins` lists them |
+| `binary_sensor.irabelle_waste_management_ready_to_bring_back` | On once at least one bin is emptied and none is still awaiting collection |
+
+Replace `notify.notify` with your own notifier. For Alexa (Alexa Media Player) use `notify.alexa_media` with `data: {type: tts}` and `target:` your Echo media players.
+
+### Take the bins out: every half hour the evening before
+
+Announces every 30 minutes from 18:00 to 21:30 the day before collection. A bin drops out of the list about 10 minutes after it is put out (it becomes *Awaiting collection*), so if two bins are due and only one goes out, the next announcements only mention the one still at home, and they stop once all are out.
 
 ```yaml
+alias: Bins - take out reminder
+triggers:
+  - trigger: time_pattern
+    minutes: /30
+conditions:
+  - condition: time
+    after: "18:00:00"
+    before: "21:30:01"
+  - condition: template
+    value_template: "{{ take_out | length > 0 }}"
+variables:
+  # Bins due tomorrow and still at home, e.g. ["residual", "recycling"]
+  take_out: >-
+    {%- set ns = namespace(bins=[]) -%}
+    {%- for name, due in (state_attr('sensor.irabelle_waste_management_bins_to_take_out', 'due') or {}).items() if due == 'tomorrow' -%}
+      {%- set ns.bins = ns.bins + [name | replace(' Bin', '') | lower] -%}
+    {%- endfor -%}
+    {{ ns.bins }}
+actions:
+  - variables:
+      bin_list: >-
+        {{ take_out[0] if take_out | length == 1
+           else take_out[:-1] | join(', ') ~ ' and ' ~ take_out[-1] }}
+      plural: "{{ 's' if take_out | length > 1 else '' }}"
+  - action: notify.notify
+    data:
+      message: Don't forget to put out the {{ bin_list }} bin{{ plural }} tonight!
+mode: single
+```
+
+Example: *"Don't forget to put out the residual and recycling bins tonight!"*, then *"…the recycling bin tonight!"* once the residual bin is out.
+
+### Bring the bins back: on a schedule
+
+Announces every 30 minutes from 18:00 to 21:00 while emptied bins are waiting at the kerb.
+
+```yaml
+alias: Bins - bring back reminder
+triggers:
+  - trigger: time_pattern
+    minutes: /30
+conditions:
+  - condition: time
+    after: "18:00:00"
+    before: "21:00:01"
+  - condition: state
+    entity_id: binary_sensor.irabelle_waste_management_ready_to_bring_back
+    state: "on"
+actions:
+  - variables:
+      back: >-
+        {{ (state_attr('sensor.irabelle_waste_management_bins_to_bring_back', 'bins') or [])
+           | map('replace', ' Bin', '') | map('lower') | list }}
+      bin_list: >-
+        {{ back[0] if back | length == 1 else back[:-1] | join(', ') ~ ' and ' ~ back[-1] }}
+      plural: "{{ 's' if back | length > 1 else '' }}"
+  - action: notify.notify
+    data:
+      message: Waste collection is done. Time to bring back the {{ bin_list }} bin{{ plural }}!
+mode: single
+```
+
+### Bring the bins back: when someone is home (at most once per hour)
+
+Announces when motion is detected in the living room (use any presence or motion sensor) while the bins are ready to come back. `mode: single` plus the one-hour `delay` at the end is the throttle: further motion during that hour is ignored. The time condition keeps it quiet at night.
+
+```yaml
+alias: Bins - bring back on motion
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.living_room_motion
+    from: "off"
+    to: "on"
+conditions:
+  - condition: state
+    entity_id: binary_sensor.irabelle_waste_management_ready_to_bring_back
+    state: "on"
+  - condition: time
+    after: "07:00:00"
+    before: "22:00:00"
+actions:
+  - variables:
+      back: >-
+        {{ (state_attr('sensor.irabelle_waste_management_bins_to_bring_back', 'bins') or [])
+           | map('replace', ' Bin', '') | map('lower') | list }}
+      bin_list: >-
+        {{ back[0] if back | length == 1 else back[:-1] | join(', ') ~ ' and ' ~ back[-1] }}
+      plural: "{{ 's' if back | length > 1 else '' }}"
+  - action: notify.notify
+    data:
+      message: Welcome back! The {{ bin_list }} bin{{ plural }} can be brought back in.
+  - delay:
+      hours: 1
+mode: single
+max_exceeded: silent
+```
+
+### Morning reminder for a bin that was forgotten
+
+If a bin due **today** is still at home at 06:30, remind once more before the truck comes:
+
+```yaml
+alias: Bins - forgotten bin this morning
 triggers:
   - trigger: time
-    at: "19:00:00"
+    at: "06:30:00"
 conditions:
   - condition: template
     value_template: >
-      {{ 'tomorrow' in state_attr('sensor.irabelle_waste_management_bins_to_take_out', 'due').values() }}
+      {{ 'today' in (state_attr('sensor.irabelle_waste_management_bins_to_take_out', 'due') or {}).values() }}
 actions:
   - action: notify.notify
     data:
       message: >
-        Put out the {{ state_attr('sensor.irabelle_waste_management_bins_to_take_out', 'sentence') }} tonight.
-```
-
-Bring-back reminder once everything is emptied and someone is home:
-
-```yaml
-triggers:
-  - trigger: state
-    entity_id: binary_sensor.irabelle_waste_management_ready_to_bring_back
-    to: "on"
-  - trigger: state
-    entity_id: binary_sensor.someone_home
-    to: "on"
-conditions:
-  - condition: state
-    entity_id: binary_sensor.irabelle_waste_management_ready_to_bring_back
-    state: "on"
-  - condition: state
-    entity_id: binary_sensor.someone_home
-    state: "on"
-actions:
-  - action: notify.notify
-    data:
-      message: >
-        Bring back the {{ state_attr('sensor.irabelle_waste_management_bins_to_bring_back', 'sentence') }}.
+        Collection is today and the
+        {{ (state_attr('sensor.irabelle_waste_management_bins_to_take_out', 'due') or {}).items()
+           | selectattr(1, 'eq', 'today') | map(attribute=0) | join(' and ') }}
+        is still at home!
+mode: single
 ```
