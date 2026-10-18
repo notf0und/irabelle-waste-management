@@ -83,7 +83,8 @@
             "beacon_password": "Beacon: change password",
             "beacon_reset": "Beacon: factory reset",
             "beacon_power_off": "Beacon: power off",
-            "beacon_power": "Beacon: power profiler (battery life)"
+            "beacon_power": "Beacon: power profiler (battery life)",
+            "beacon_sensor_select": "Beacon: sensors"
           }
         },
         "bin_settings": {
@@ -140,7 +141,15 @@
             "minorID": "Minor",
             "nid": "Namespace ID",
             "sid": "Instance ID",
-            "url": "URL"
+            "url": "URL",
+            "ks_axis": "Include acceleration (axis)",
+            "ks_ht": "Include temperature & humidity",
+            "ks_pir": "Include PIR",
+            "ks_lux": "Include light",
+            "ks_voc": "Include VOC",
+            "ks_co2": "Include CO₂",
+            "ks_mag": "Include magnetometer",
+            "ks_rcd": "Include number of history records"
           },
           "data_description": {
             "conn": "Keep this on: without a connectable slot, Home Assistant (and the KBeacon app) can only connect after pressing the beacon's button.",
@@ -168,12 +177,15 @@
             "trAPwr": "Triggered transmit power",
             "trPara": "Sensitivity / parameter",
             "odr": "Accelerometer sample rate",
-            "ocnt": "Motion duration to trigger"
+            "ocnt": "Motion duration to trigger",
+            "aAng": "Above angle",
+            "rptPrd": "Repeat while not recovered"
           },
           "data_description": {
             "trAChg": "The bins detect motion through this: while triggered the beacon advertises a different UUID (last byte + 1).",
-            "trPara": "Motion: 1 (most sensitive) to 126. Periodically: period in ms.",
-            "ocnt": "How many consecutive samples above the threshold count as motion."
+            "trPara": "Motion: sensitivity, 1 (most sensitive) to 126. Temperature: °C. Humidity: %. Light: lux. Angle: below this angle. Humidity periodically / PIR: interval in seconds. Periodically: period in ms.",
+            "ocnt": "How many consecutive samples above the threshold count as motion.",
+            "rptPrd": "Minutes; 0 reports only once."
           }
         },
         "beacon_export": {
@@ -273,6 +285,51 @@
           "data_description": {
             "setup_motion": "Makes the beacon advertise a different UUID (last byte + 1) when moved, which is how emptying is detected."
           }
+        },
+        "beacon_sensor_select": {
+          "title": "Beacon: sensors",
+          "description": "Pick a sensor to configure.",
+          "data": {
+            "sensor": "Sensor"
+          }
+        },
+        "beacon_sensor": {
+          "title": "Sensor: {sensor}",
+          "description": "Read-only: {info}. Disable periods are daily time ranges (your local time) during which the sensor is turned off, e.g. no motion detection at night.",
+          "data": {
+            "log": "Record history",
+            "msItvl": "Measuring interval",
+            "lgItvl": "Recording interval",
+            "tsThd": "Temperature change to record",
+            "hsThd": "Humidity change to record",
+            "bkOff": "Detection back-off",
+            "luxThd": "Light change to record",
+            "vocThd": "VOC change to record",
+            "noxThd": "NOx change to record",
+            "co2Thd": "CO₂ change to record",
+            "asc": "CO₂ automatic self-calibration",
+            "pThd": "Parking magnetic threshold",
+            "pDly": "Parking detection delay",
+            "mode": "Scan type",
+            "rssi": "Minimum RSSI",
+            "dur": "Scan duration",
+            "itvl": "Scan interval",
+            "mItvl": "Scan interval while moving",
+            "aSlot": "Slot that advertises scan results",
+            "max": "Maximum devices per scan",
+            "dPrd0_on": "Disable period 1",
+            "dPrd0_start": "Period 1 from",
+            "dPrd0_end": "Period 1 until",
+            "dPrd1_on": "Disable period 2",
+            "dPrd1_start": "Period 2 from",
+            "dPrd1_end": "Period 2 until",
+            "dPrd2_on": "Disable period 3",
+            "dPrd2_start": "Period 3 from",
+            "dPrd2_end": "Period 3 until"
+          },
+          "data_description": {
+            "dPrd0_on": "Careful with the accelerometer: while it is disabled, a bin being emptied is not detected (the 19:00 fallback still applies)."
+          }
         }
       },
       "error": {
@@ -287,7 +344,8 @@
         "password_mismatch": "The passwords do not match.",
         "confirm_required": "Tick the box to confirm.",
         "beacon_unreachable": "Could not read the beacon (see above). Fix the password and try again, or add it without connecting.",
-        "beacon_write_failed": "Could not write to the beacon (see above)."
+        "beacon_write_failed": "Could not write to the beacon (see above).",
+        "invalid_period": "The start and end times must differ."
       },
       "abort": {
         "already_configured": "This beacon is already configured.",
@@ -298,7 +356,8 @@
         "export_done": "Done.",
         "identify_done": "The beacon is flashing its LED.",
         "power_off_done": "The beacon is powered off. Press its button to turn it on.",
-        "not_heard": "The proxies do not hear that beacon right now, so there is no UUID to follow. Move it near a proxy and try again."
+        "not_heard": "The proxies do not hear that beacon right now, so there is no UUID to follow. Move it near a proxy and try again.",
+        "no_sensors": "This beacon has no configurable sensors."
       }
     }
   },
@@ -570,6 +629,20 @@
         "8": "Vibrate",
         "16": "Report to app",
         "32": "Bluetooth scan"
+      }
+    },
+    "sensor_type": {
+      "options": {
+        "1": "Accelerometer",
+        "2": "Temperature & humidity",
+        "8": "Alarm",
+        "16": "PIR",
+        "32": "Light",
+        "64": "VOC",
+        "65": "CO₂",
+        "66": "Geomagnetic (parking)",
+        "68": "Bluetooth scanner",
+        "69": "NFC"
       }
     }
   }

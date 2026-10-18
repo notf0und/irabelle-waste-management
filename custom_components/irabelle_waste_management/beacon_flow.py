@@ -15,6 +15,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import SubentryFlowResult
 from homeassistant.const import CONF_NAME
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -27,6 +28,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .beacon import BeaconError, BeaconImportError
@@ -47,6 +49,7 @@ from .kbeacon.identity import (
     setup_payload,
     supports_motion,
 )
+from .kbeacon import sensors as sensor_defs
 from .kbeacon.power import estimate as power_estimate
 from .kbeacon.protocol import DEFAULT_PASSWORD, validate_password
 from .kbeacon.settings import export_settings
@@ -62,6 +65,7 @@ BEACON_MENU = [
     "beacon_general",
     "beacon_slot_select",
     "beacon_trigger_select",
+    "beacon_sensor_select",
     "beacon_export",
     "beacon_import",
     "beacon_power",
@@ -94,6 +98,29 @@ def _ma(microamps: float) -> str:
     return f"{microamps / 1000:.5f} mA"
 
 
+def _field_selector(field: sensor_defs.Field) -> Any:
+    if field.kind == "bool":
+        return BooleanSelector()
+    if field.kind == "select":
+        return SelectSelector(
+            SelectSelectorConfig(
+                options=[str(k) for k in field.options or {}],
+                translation_key="adv_mode",
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+    return _number(field.minimum, field.maximum, field.step, field.unit)
+
+
+def _add_fields(
+    target: dict[Any, Any], fields: list[sensor_defs.Field], current: dict[str, Any]
+) -> None:
+    for field in fields:
+        target[vol.Required(field.key, default=sensor_defs.to_ui(field, current.get(field.key)))] = (
+            _field_selector(field)
+        )
+
+
 def identity_fields(current: dict[str, Any]) -> dict[Any, Any]:
     """UUID / major / minor fields, prefilled."""
     return {
@@ -111,6 +138,7 @@ class BeaconStepsMixin:
     _slot_type: int = 0
     _trigger_index: int = 0
     _trigger_type: int = 0
+    _sensor_type: int = 0
 
     # -- helpers ------------------------------------------------------------
 
@@ -164,6 +192,9 @@ class BeaconStepsMixin:
         if found is None or not found[0].beacons.supports_identify(found[1]):
             # KBeacon Pro offers no ring/flash on beacons without a beeper.
             menu.remove("beacon_identify")
+        if found is not None and (cached := found[0].beacons.config(found[1])) is not None:
+            if not any(sensor_defs.configurable(s) for s in cached.get("srObj", [])):
+                menu.remove("beacon_sensor_select")
         return self.async_show_menu(  # type: ignore[attr-defined]
             step_id="reconfigure",
             menu_options=menu,
@@ -363,6 +394,9 @@ class BeaconStepsMixin:
                 slot["sid"] = user_input["sid"].strip()
             elif adv_type == 4:
                 slot["url"] = user_input["url"].strip()
+            elif adv_type == 1:
+                for key in sensor_defs.ksensor_content(config):
+                    slot[key] = 1 if user_input.get(f"ks_{key}") else 0
             if not errors:
                 old_uuid = current.get("uuid")
                 if (abort := await self._write({"advObj": [slot]})) is not None:
@@ -405,6 +439,9 @@ class BeaconStepsMixin:
             fields[vol.Required("sid", default=defaults.get("sid", "0x000000000001"))] = TextSelector()
         elif adv_type == 4:
             fields[vol.Required("url", default=defaults.get("url", "https://"))] = TextSelector()
+        elif adv_type == 1:
+            for key in sensor_defs.ksensor_content(config):
+                fields[vol.Required(f"ks_{key}", default=bool(defaults.get(key, 0)))] = BooleanSelector()
 
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="beacon_slot",
@@ -502,8 +539,10 @@ class BeaconStepsMixin:
                 trigger["trPara"] = int(user_input["trPara"])
                 trigger["odr"] = int(user_input["odr"])
                 trigger["ocnt"] = int(user_input["ocnt"])
-            elif "trPara" in user_input:
-                trigger["trPara"] = int(user_input["trPara"])
+            else:
+                for field in self._trigger_param_fields(trigger_type):
+                    if field.key in user_input:
+                        trigger[field.key] = sensor_defs.from_ui(field, user_input[field.key])
             if (abort := await self._write({"trObj": [trigger]})) is not None:
                 return abort
             return self._done()
@@ -540,16 +579,106 @@ class BeaconStepsMixin:
             )
             fields[vol.Required("odr", default=str(defaults.get("odr", 2)))] = _select(caps.ACC_ODR)
             fields[vol.Required("ocnt", default=defaults.get("ocnt", 1))] = _number(1, 255, 1)
-        elif trigger_type == 20:
-            fields[vol.Required("trPara", default=defaults.get("trPara", 60000))] = _number(
-                100, 43200000, 100, "ms"
-            )
+        else:
+            _add_fields(fields, self._trigger_param_fields(trigger_type), defaults)
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="beacon_trigger",
             data_schema=vol.Schema(fields),
             description_placeholders={
                 "trigger": str(index),
                 "type": caps.TRIGGER_TYPES[trigger_type],
+            },
+        )
+
+    @staticmethod
+    def _trigger_param_fields(trigger_type: int) -> list[sensor_defs.Field]:
+        fields = []
+        if (param := sensor_defs.TRIGGER_PARAM.get(trigger_type)) is not None:
+            fields.append(param)
+        if trigger_type == 2:
+            fields += sensor_defs.ANGLE_FIELDS
+        return fields
+
+    # -- sensors ------------------------------------------------------------
+
+    async def async_step_beacon_sensor_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Choose one of the beacon's sensors."""
+        if user_input is None:
+            if (abort := await self._load()) is not None:
+                return abort
+        sensors = [s for s in self._common().get("srObj", []) if sensor_defs.configurable(s)]
+        if not sensors:
+            return self.async_abort(reason="no_sensors")  # type: ignore[attr-defined]
+        if user_input is not None:
+            self._sensor_type = int(user_input["sensor"])
+            return await self.async_step_beacon_sensor()
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="beacon_sensor_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("sensor", default=str(sensors[0]["srType"])): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[str(s["srType"]) for s in sensors],
+                            translation_key="sensor_type",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_beacon_sensor(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Logging, measuring, thresholds and daily disable periods of a sensor."""
+        config = self._common()
+        sensor = next(
+            (s for s in config.get("srObj", []) if int(s.get("srType", 0)) == self._sensor_type),
+            {"srType": self._sensor_type},
+        )
+        fields = sensor_defs.sensor_fields(sensor)
+        tz = dt_util.get_default_time_zone()
+        today = dt_util.now()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            payload: dict[str, Any] = {"srType": self._sensor_type}
+            for field in fields:
+                payload[field.key] = sensor_defs.from_ui(field, user_input[field.key])
+            for key in sensor_defs.disable_periods(sensor):
+                if user_input.get(f"{key}_on"):
+                    start = dt_util.parse_time(user_input[f"{key}_start"])
+                    end = dt_util.parse_time(user_input[f"{key}_end"])
+                    if start is None or end is None or start == end:
+                        errors[f"{key}_end"] = "invalid_period"
+                        continue
+                    payload[key] = sensor_defs.encode_period(start, end, tz, today)
+                else:
+                    payload[key] = 0
+            if not errors:
+                if (abort := await self._write({"srObj": [payload]})) is not None:
+                    return abort
+                return self._done()
+
+        schema: dict[Any, Any] = {}
+        _add_fields(schema, fields, sensor)
+        for key in sensor_defs.disable_periods(sensor):
+            period = sensor_defs.decode_period(int(sensor.get(key, 0) or 0), tz, today)
+            schema[vol.Required(f"{key}_on", default=period is not None)] = BooleanSelector()
+            schema[vol.Optional(f"{key}_start", default=(period[0] if period else dt_util.parse_time("22:00")).strftime("%H:%M:%S"))] = TimeSelector()
+            schema[vol.Optional(f"{key}_end", default=(period[1] if period else dt_util.parse_time("06:00")).strftime("%H:%M:%S"))] = TimeSelector()
+        info = ", ".join(
+            f"{k}={v}" for k, v in sensor.items() if k not in {f.key for f in fields} | {"srType", *sensor_defs.DISABLE_PERIOD_KEYS}
+        )
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="beacon_sensor",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "sensor": sensor_defs.SENSOR_TYPES.get(self._sensor_type, str(self._sensor_type)),
+                "info": info or "-",
             },
         )
 

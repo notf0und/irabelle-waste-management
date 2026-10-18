@@ -55,13 +55,14 @@ KKM KBeacon / KBeacon Pro beacons (tested with the K4P and BC04P) can be configu
 | Bin settings | Bin name, collection calendar, battery capacity and the **beacon password** (KKM default `0000000000000000`) |
 | Beacon: UUID, major & minor | The iBeacon identity of the slot the bin follows (and the motion trigger if it is missing); the bin follows the change |
 | Beacon: general | Advertised name, measured power at 1 m, auto power-on, LED blinking |
-| Beacon: advertising slots | Per slot: type (iBeacon, Eddystone UID/URL/TLM, KSensor, System…), interval, transmit power, connectable, trigger-only, BLE 5 mode, channels, iBeacon UUID/major/minor |
-| Beacon: triggers | Per trigger: type (motion, buttons, periodic…), actions, slot, UUID change while triggered, duration, interval, power, motion sensitivity and sample rate |
+| Beacon: advertising slots | Per slot: type (iBeacon, Eddystone UID/URL/TLM, KSensor, System…), interval, transmit power, connectable, trigger-only, BLE 5 mode, channels, iBeacon UUID/major/minor, Eddystone fields, KSensor content (acceleration, temperature & humidity, light, PIR, VOC, CO₂, magnetometer, record count) |
+| Beacon: triggers | Per trigger: type (motion, angle, buttons, temperature/humidity/light thresholds, PIR, cut-off, periodic…), actions, slot, UUID change while triggered, duration, interval, power, and the type's parameters (motion sensitivity and sample rate, °C, %, lux, angles, intervals) |
+| Beacon: sensors | For beacons with configurable sensors (temperature & humidity, light, PIR, VOC, CO₂, geomagnetic, Bluetooth scanner): history recording, measuring interval, change thresholds and daily disable periods, as reported by the firmware |
 | Beacon: export / import settings | Copy one beacon's setup to others. An import never changes the beacon's name, password, UUID, major or minor; slots and triggers missing from the template are turned off |
 | Beacon: power profiler | Estimated average current and battery life from the beacon's settings, like KBeacon Pro (regular advertising only; triggered broadcasts and connections excluded). Set the cell's capacity here (default 1000 mAh, a CR2477) |
 | Beacon: identify, change password, factory reset, power off | Identify (beep + LED) only appears for beacons with a beeper. Reset and power off ask for confirmation |
 
-Only the options the beacon reports as supported are offered. Each screen reads the beacon first, so keep it near a proxy. Changing the UUID of the bin's idle advertisement updates the bin automatically.
+Only the options the beacon reports as supported are offered. Reading sensor history logs is not implemented yet (none of the tested beacons record history). Each screen reads the beacon first, so keep it near a proxy. Changing the UUID of the bin's idle advertisement updates the bin automatically.
 
 Every bin also gets a **Battery life** sensor (estimated days left), a **Read beacon settings** button, an **Identify** button on beacons that can beep, (model, firmware and hardware version appear on the device page), and the same operations are available as actions for scripts: `irabelle_waste_management.read_beacon_settings`, `write_beacon_settings`, `export_beacon_settings`, `import_beacon_settings`, `identify_beacon`, `change_beacon_password`, `reset_beacon`, `power_off_beacon`.
 
