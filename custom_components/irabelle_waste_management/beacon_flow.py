@@ -39,6 +39,14 @@ from .const import (
     MOTION_UUID_AUTO,
 )
 from .kbeacon import capabilities as caps
+from .kbeacon.identity import (
+    identity,
+    motion_detection_ready,
+    motion_uuid,
+    normalize as identity_normalize,
+    setup_payload,
+    supports_motion,
+)
 from .kbeacon.power import estimate as power_estimate
 from .kbeacon.protocol import DEFAULT_PASSWORD, validate_password
 from .kbeacon.settings import export_settings
@@ -50,6 +58,7 @@ MAX_NAME_LENGTH = 18
 
 BEACON_MENU = [
     "bin_settings",
+    "beacon_identity",
     "beacon_general",
     "beacon_slot_select",
     "beacon_trigger_select",
@@ -83,6 +92,15 @@ def _number(low: float, high: float, step: float | str = 1, unit: str | None = N
 def _ma(microamps: float) -> str:
     """Format like KBeacon Pro (mA with 5 decimals)."""
     return f"{microamps / 1000:.5f} mA"
+
+
+def identity_fields(current: dict[str, Any]) -> dict[Any, Any]:
+    """UUID / major / minor fields, prefilled."""
+    return {
+        vol.Required("uuid", default=current["uuid"]): TextSelector(),
+        vol.Required("majorID", default=current["majorID"]): _number(0, 65535),
+        vol.Required("minorID", default=current["minorID"]): _number(0, 65535),
+    }
 
 
 class BeaconStepsMixin:
@@ -151,6 +169,62 @@ class BeaconStepsMixin:
             menu_options=menu,
             description_placeholders={
                 "address": self._get_reconfigure_subentry().data["address"]  # type: ignore[attr-defined]
+            },
+        )
+
+    # -- identity -----------------------------------------------------------
+
+    async def async_step_beacon_identity(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """UUID/major/minor of the slot the bin follows (+ the motion trigger)."""
+        if user_input is None:
+            if (abort := await self._load()) is not None:
+                return abort
+        config = self._common()
+        offer_motion = supports_motion(config) and not motion_detection_ready(config)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                new_uuid = identity_normalize(user_input["uuid"])
+            except ValueError:
+                errors["uuid"] = "invalid_uuid"
+            if not errors:
+                payload = setup_payload(
+                    config,
+                    new_uuid,
+                    int(user_input["majorID"]),
+                    int(user_input["minorID"]),
+                    offer_motion and user_input.get("setup_motion", False),
+                )
+                if payload and (abort := await self._write(payload)) is not None:
+                    return abort
+                subentry = self._get_reconfigure_subentry()  # type: ignore[attr-defined]
+                return self.async_update_and_abort(  # type: ignore[attr-defined]
+                    self._get_entry(), subentry,  # type: ignore[attr-defined]
+                    data={
+                        **subentry.data,
+                        CONF_IDLE_UUID: new_uuid.lower(),
+                        CONF_MOTION_UUID: MOTION_UUID_AUTO,
+                    },
+                )
+        current = identity(config) or {
+            "uuid": "7777772E-6B6B-6D63-6E2E-636F6D000001", "majorID": 1, "minorID": 1
+        }
+        fields = identity_fields(current)
+        if offer_motion:
+            fields[vol.Required("setup_motion", default=True)] = BooleanSelector()
+        status = "ready" if motion_detection_ready(config) else (
+            "missing" if supports_motion(config) else "unsupported"
+        )
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="beacon_identity",
+            data_schema=vol.Schema(fields),
+            errors=errors,
+            description_placeholders={
+                "slot": str(current.get("slot", 0)),
+                "motion": status,
+                "motion_uuid": motion_uuid(current["uuid"]),
             },
         )
 

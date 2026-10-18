@@ -52,7 +52,8 @@ KKM KBeacon / KBeacon Pro beacons (tested with the K4P and BC04P) can be configu
 
 | Screen | What it does |
 | --- | --- |
-| Bin settings | Bin name, UUIDs, collection calendar and the **beacon password** (KKM default `0000000000000000`) |
+| Bin settings | Bin name, collection calendar, battery capacity and the **beacon password** (KKM default `0000000000000000`) |
+| Beacon: UUID, major & minor | The iBeacon identity of the slot the bin follows (and the motion trigger if it is missing); the bin follows the change |
 | Beacon: general | Advertised name, measured power at 1 m, auto power-on, LED blinking |
 | Beacon: advertising slots | Per slot: type (iBeacon, Eddystone UID/URL/TLM, KSensor, System…), interval, transmit power, connectable, trigger-only, BLE 5 mode, channels, iBeacon UUID/major/minor |
 | Beacon: triggers | Per trigger: type (motion, buttons, periodic…), actions, slot, UUID change while triggered, duration, interval, power, motion sensitivity and sample rate |
@@ -100,11 +101,12 @@ Irabelle Waste Management requires Home Assistant 2026.10 or newer and the Bluet
 2. Download Irabelle Waste Management in HACS and restart Home Assistant.
 3. **Settings → Devices & services → Add integration → Irabelle Waste Management.** Set the collection window and timing rules (all can be changed later with **Configure**).
 4. On the integration page, click **Add bin** for each bin:
-   - Pick the beacon from the list of iBeacons your proxies currently hear, or type its MAC address. Keep the bin still so its idle advertisement is the one listed.
-   - The idle UUID is filled in for you. Leave the motion UUID as `auto` (any other UUID from the same MAC counts as motion) or enter it explicitly.
-   - Optionally choose the collection calendar and a keyword such as `rubbish` or `recycling`.
+   - Name it, pick the beacon from the list of iBeacons your proxies hear (strongest first) or type its MAC address, and enter the beacon password if it is not KKM's default `0000000000000000`.
+   - The integration connects to the beacon and reads it: the iBeacon **UUID, major and minor** are filled in from the beacon, and changing them writes them to the beacon. If the beacon has no motion trigger that changes its UUID, **Set up the motion trigger** (ticked by default) adds it, so a factory-fresh KKM beacon works without the KBeacon app.
+   - Optionally choose the collection calendar, a keyword such as `rubbish` or `recycling`, and the battery capacity.
+   - If the beacon cannot be reached (out of range, wrong password, not connectable), fix the password and retry, or tick **Add without connecting** to follow the UUID it advertises.
 
-Install the integration only once and add every bin to the same hub. Use the bin's **⋮ → Reconfigure** to rename it or change its UUIDs or calendar.
+Install the integration only once and add every bin to the same hub. Use the bin's **⋮ → Configure** to rename it, change its calendar, or configure its beacon.
 
 ## Example automations
 

@@ -55,39 +55,25 @@
       "step": {
         "user": {
           "title": "Add a bin",
-          "description": "The Bluetooth proxies currently hear {count} iBeacon(s) that are not configured yet. Leave the bin still so its normal (idle) advertisement is the one listed, or type the MAC address.",
+          "description": "The Bluetooth proxies hear {count} iBeacon(s) that are not configured yet (strongest first). The beacon is read over Bluetooth next, so keep it near a proxy. {error}",
           "data": {
             "name": "Name",
-            "address": "Beacon"
-          },
-          "data_description": {
-            "address": "MAC address of the bin's beacon."
-          }
-        },
-        "details": {
-          "title": "Beacon {address}",
-          "data": {
-            "idle_uuid": "Idle UUID",
-            "motion_uuid": "Motion UUID",
-            "calendar_entity": "Collection calendar",
-            "calendar_keyword": "Calendar keyword",
+            "address": "Beacon",
             "beacon_password": "Beacon password",
-            "battery_capacity": "Battery capacity"
+            "skip_beacon": "Add without connecting to the beacon"
           },
           "data_description": {
-            "idle_uuid": "The UUID the beacon advertises while it is still.",
-            "motion_uuid": "The UUID it advertises when it moves. `auto` treats any other iBeacon UUID from this MAC as motion.",
-            "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
-            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
-            "beacon_password": "Optional. Only needed to configure the beacon from Home Assistant; empty means KKM's default 0000000000000000.",
-            "battery_capacity": "Used for the battery-life estimate (1000 mAh for a CR2477, 220 mAh for a CR2032)."
+            "address": "The bin's beacon, or type its MAC address.",
+            "beacon_password": "Leave empty for KKM's default (0000000000000000).",
+            "skip_beacon": "Use the UUID the beacon advertises instead. You can configure the beacon later from the bin's Configure menu."
           }
         },
         "reconfigure": {
           "title": "Configure bin ({address})",
           "description": "Beacon settings are read from the beacon each time you open a screen, so keep it within range of a Bluetooth proxy.",
           "menu_options": {
-            "bin_settings": "Bin settings (name, UUIDs, calendar, password)",
+            "bin_settings": "Bin settings (name, calendar, password, battery)",
+            "beacon_identity": "Beacon: UUID, major & minor",
             "beacon_general": "Beacon: general",
             "beacon_slot_select": "Beacon: advertising slots",
             "beacon_trigger_select": "Beacon: triggers (motion, button…)",
@@ -104,18 +90,16 @@
           "title": "Bin settings ({address})",
           "data": {
             "name": "Name",
-            "idle_uuid": "Idle UUID",
-            "motion_uuid": "Motion UUID",
             "calendar_entity": "Collection calendar",
             "calendar_keyword": "Calendar keyword",
-            "beacon_password": "Beacon password",
-            "battery_capacity": "Battery capacity"
+            "battery_capacity": "Battery capacity",
+            "beacon_password": "Beacon password"
           },
           "data_description": {
-            "motion_uuid": "`auto` treats any other iBeacon UUID from this MAC as motion.",
-            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count.",
-            "beacon_password": "KBeacon password (8-16 characters), used to configure the beacon. Leave empty to keep the stored one (default 0000000000000000).",
-            "battery_capacity": "Used for the battery-life estimate (1000 mAh for a CR2477, 220 mAh for a CR2032)."
+            "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
+            "battery_capacity": "For the battery-life estimate: 1000 mAh for a CR2477, 220 mAh for a CR2032.",
+            "beacon_password": "Only fill in to change the stored password (8-16 characters)."
           }
         },
         "beacon_general": {
@@ -240,6 +224,55 @@
             "battery_capacity": "1000 mAh for a CR2477, 220 mAh for a CR2032.",
             "battery_efficiency": "Share of the capacity actually usable; KKM recommends 75%."
           }
+        },
+        "beacon_setup": {
+          "title": "Set up {beacon_name}",
+          "description": "{model}, firmware {firmware}, battery {battery}%. Motion detection: **{motion}**. The UUID, major and minor below are read from the beacon; changing them writes them to the beacon. {error}",
+          "data": {
+            "uuid": "iBeacon UUID",
+            "majorID": "Major",
+            "minorID": "Minor",
+            "setup_motion": "Set up the motion trigger",
+            "calendar_entity": "Collection calendar",
+            "calendar_keyword": "Calendar keyword",
+            "battery_capacity": "Battery capacity",
+            "beacon_password": "Beacon password"
+          },
+          "data_description": {
+            "setup_motion": "Makes the beacon advertise a different UUID (last byte + 1) for 30 s when moved, which is how emptying is detected. Recommended.",
+            "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
+            "battery_capacity": "For the battery-life estimate: 1000 mAh for a CR2477, 220 mAh for a CR2032."
+          }
+        },
+        "manual": {
+          "title": "Add without connecting",
+          "description": "The bin follows the UUID the beacon advertises now ({uuid}). Motion is any other UUID from the same beacon.",
+          "data": {
+            "calendar_entity": "Collection calendar",
+            "calendar_keyword": "Calendar keyword",
+            "battery_capacity": "Battery capacity",
+            "beacon_password": "Beacon password"
+          },
+          "data_description": {
+            "calendar_entity": "Optional. Used for the next collection date and the bins-to-take-out summary.",
+            "calendar_keyword": "Only events whose title contains this text (case-insensitive) count, e.g. `rubbish` or `recycling`. Empty matches every event.",
+            "battery_capacity": "For the battery-life estimate: 1000 mAh for a CR2477, 220 mAh for a CR2032.",
+            "beacon_password": "Only fill in to change the stored password (8-16 characters)."
+          }
+        },
+        "beacon_identity": {
+          "title": "Beacon: UUID, major & minor",
+          "description": "The bin follows iBeacon slot {slot}. Motion detection: **{motion}** (while moving the beacon advertises {motion_uuid}). Saving writes to the beacon and updates the bin.",
+          "data": {
+            "uuid": "iBeacon UUID",
+            "majorID": "Major",
+            "minorID": "Minor",
+            "setup_motion": "Set up the motion trigger"
+          },
+          "data_description": {
+            "setup_motion": "Makes the beacon advertise a different UUID (last byte + 1) when moved, which is how emptying is detected."
+          }
         }
       },
       "error": {
@@ -252,7 +285,9 @@
         "import_rejected": "This template cannot be applied (see above).",
         "password_length": "Passwords are 8 to 16 characters.",
         "password_mismatch": "The passwords do not match.",
-        "confirm_required": "Tick the box to confirm."
+        "confirm_required": "Tick the box to confirm.",
+        "beacon_unreachable": "Could not read the beacon (see above). Fix the password and try again, or add it without connecting.",
+        "beacon_write_failed": "Could not write to the beacon (see above)."
       },
       "abort": {
         "already_configured": "This beacon is already configured.",
@@ -262,7 +297,8 @@
         "beacon_saved": "Saved to the beacon.",
         "export_done": "Done.",
         "identify_done": "The beacon is flashing its LED.",
-        "power_off_done": "The beacon is powered off. Press its button to turn it on."
+        "power_off_done": "The beacon is powered off. Press its button to turn it on.",
+        "not_heard": "The proxies do not hear that beacon right now, so there is no UUID to follow. Move it near a proxy and try again."
       }
     }
   },

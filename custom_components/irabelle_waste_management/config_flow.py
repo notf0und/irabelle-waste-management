@@ -23,6 +23,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -43,6 +44,7 @@ from .const import (
     CONF_ADDRESS,
     CONF_AWAY_MINUTES,
     CONF_BATTERY_CAPACITY,
+    CONF_BATTERY_EFFICIENCY,
     CONF_BEACON_PASSWORD,
     CONF_CALENDAR,
     CONF_IDLE_UUID,
@@ -59,12 +61,21 @@ from .const import (
     MOTION_UUID_AUTO,
     SUBENTRY_BIN,
 )
-from .beacon_flow import BeaconStepsMixin
-from .ibeacon import IBeaconFrame, frame_from_service_info, normalize_uuid
+from .beacon_flow import BeaconStepsMixin, identity_fields as _identity_fields
+from .ibeacon import IBeaconFrame, frame_from_service_info
 from .kbeacon.power import DEFAULT_CAPACITY_MAH
-from .kbeacon.protocol import validate_password
+from .beacon import BeaconError, async_beacon_session
+from .kbeacon.identity import (
+    identity,
+    motion_detection_ready,
+    normalize as identity_normalize,
+    setup_payload,
+    supports_motion,
+)
+from .kbeacon.protocol import DEFAULT_PASSWORD, validate_password
 
 DEFAULT_TITLE = "Irabelle Waste Management"
+KKM_DEFAULT_UUID = "7777772E-6B6B-6D63-6E2E-636F6D000001"
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
 
@@ -166,14 +177,17 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
         """Initialise the flow."""
         self._address: str | None = None
         self._name: str | None = None
+        self._password: str = DEFAULT_PASSWORD
         self._seen: dict[str, tuple[IBeaconFrame, str | None, int | None]] = {}
+        self._read: dict[str, Any] | None = None
+        self._offer_skip = False
 
     # -- add ---------------------------------------------------------------
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Pick the beacon (from what the proxies hear) and name the bin."""
+        """Pick the beacon, name the bin; then read the beacon."""
         configured = {
             sub.data[CONF_ADDRESS].upper()
             for sub in self._get_entry().subentries.values()
@@ -181,17 +195,36 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
         }
         self._seen = _discovered_ibeacons(self.hass, exclude=configured)
         errors: dict[str, str] = {}
+        placeholders = {"count": str(len(self._seen)), "error": ""}
 
         if user_input is not None:
             address = user_input[CONF_ADDRESS].strip().upper().replace("-", ":")
+            password = (user_input.get(CONF_BEACON_PASSWORD) or "").strip() or DEFAULT_PASSWORD
             if not _MAC_RE.match(address):
                 errors[CONF_ADDRESS] = "invalid_address"
             elif address in configured:
                 return self.async_abort(reason="already_configured")
-            else:
+            try:
+                validate_password(password)
+            except ValueError:
+                errors[CONF_BEACON_PASSWORD] = "password_length"
+            if not errors:
                 self._address = address
-                self._name = user_input[CONF_NAME].strip()
-                return await self.async_step_details()
+                self._name = user_input[CONF_NAME].strip() or address
+                self._password = password
+                if user_input.get("skip_beacon"):
+                    return await self.async_step_manual()
+                try:
+                    self._read = await async_beacon_session(
+                        self.hass, address, password, self._name,
+                        lambda kb: kb.read_config(sensors=False),
+                    )
+                except BeaconError as err:
+                    errors["base"] = "beacon_unreachable"
+                    placeholders["error"] = str(err)
+                    self._offer_skip = True
+                else:
+                    return await self.async_step_beacon_setup()
 
         options = [
             SelectOptionDict(
@@ -207,53 +240,117 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
                 self._seen.items(), key=lambda item: -(item[1][2] or -200)
             )
         ]
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME): TextSelector(),
-                vol.Required(CONF_ADDRESS): SelectSelector(
-                    SelectSelectorConfig(
-                        options=options,
-                        custom_value=True,
-                        mode=SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-            }
-        )
+        fields: dict[Any, Any] = {
+            vol.Required(CONF_NAME): TextSelector(),
+            vol.Required(CONF_ADDRESS): SelectSelector(
+                SelectSelectorConfig(
+                    options=options, custom_value=True, mode=SelectSelectorMode.DROPDOWN
+                )
+            ),
+            vol.Optional(CONF_BEACON_PASSWORD): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+        }
+        if self._offer_skip:
+            fields[vol.Optional("skip_beacon", default=False)] = BooleanSelector()
+        suggested = {k: v for k, v in (user_input or {}).items() if k != CONF_BEACON_PASSWORD}
         return self.async_show_form(
             step_id="user",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(fields), suggested),
             errors=errors,
-            description_placeholders={"count": str(len(options))},
+            description_placeholders=placeholders,
         )
 
-    async def async_step_details(
+    async def async_step_beacon_setup(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Beacon UUIDs and the collection calendar."""
-        assert self._address is not None
+        """UUID/major/minor read from the beacon (written back if changed)."""
+        assert self._address is not None and self._read is not None
+        config = self._read
+        offer_motion = supports_motion(config) and not motion_detection_ready(config)
         errors: dict[str, str] = {}
-        if user_input is not None:
-            data, errors = _validate_details(user_input)
-            if not errors:
-                data[CONF_ADDRESS] = self._address
-                return self.async_create_entry(
-                    title=self._name or self._address,
-                    data=data,
-                    unique_id=self._address,
-                )
+        placeholders = {**_beacon_placeholders(config), "error": ""}
 
-        suggested = user_input or {}
-        if not suggested and (seen := self._seen.get(self._address)):
-            frame = seen[0]
-            # The beacon is normally at rest, so what we hear is its idle frame.
-            suggested = {CONF_IDLE_UUID: frame.uuid}
+        if user_input is not None:
+            data, errors = _validate_common(user_input)
+            try:
+                uuid = identity_normalize(user_input["uuid"])
+            except ValueError:
+                errors["uuid"] = "invalid_uuid"
+            if not errors:
+                payload = setup_payload(
+                    config,
+                    uuid,
+                    int(user_input["majorID"]),
+                    int(user_input["minorID"]),
+                    offer_motion and user_input.get("setup_motion", False),
+                )
+                if payload:
+                    try:
+                        await async_beacon_session(
+                            self.hass, self._address, self._password, self._name or "",
+                            lambda kb: kb.write_config(payload),
+                        )
+                    except BeaconError as err:
+                        errors["base"] = "beacon_write_failed"
+                        placeholders["error"] = str(err)
+                if not errors:
+                    data.update(
+                        {
+                            CONF_ADDRESS: self._address,
+                            CONF_IDLE_UUID: uuid.lower(),
+                            CONF_MOTION_UUID: MOTION_UUID_AUTO,
+                            CONF_BEACON_PASSWORD: self._password,
+                        }
+                    )
+                    return self.async_create_entry(
+                        title=self._name or self._address,
+                        data=data,
+                        unique_id=self._address,
+                    )
+
+        current = identity(config) or _fallback_identity(self._seen.get(self._address))
+        fields: dict[Any, Any] = _identity_fields(current)
+        if offer_motion:
+            fields[vol.Required("setup_motion", default=True)] = BooleanSelector()
+        fields.update(_common_fields())
         return self.async_show_form(
-            step_id="details",
+            step_id="beacon_setup",
             data_schema=self.add_suggested_values_to_schema(
-                _details_schema(), {CONF_MOTION_UUID: MOTION_UUID_AUTO, **suggested}
+                vol.Schema(fields), user_input or {}
             ),
             errors=errors,
-            description_placeholders={"address": self._address},
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Add without connecting: follow the UUID the beacon advertises."""
+        assert self._address is not None
+        seen = self._seen.get(self._address)
+        if seen is None:
+            return self.async_abort(reason="not_heard")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data, errors = _validate_common(user_input)
+            if not errors:
+                data.update(
+                    {
+                        CONF_ADDRESS: self._address,
+                        CONF_IDLE_UUID: seen[0].uuid.lower(),
+                        CONF_MOTION_UUID: MOTION_UUID_AUTO,
+                        CONF_BEACON_PASSWORD: self._password,
+                    }
+                )
+                return self.async_create_entry(
+                    title=self._name or self._address, data=data, unique_id=self._address
+                )
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=vol.Schema(_common_fields()),
+            errors=errors,
+            description_placeholders={"uuid": seen[0].uuid.upper()},
         )
 
     # -- reconfigure -----------------------------------------------------
@@ -261,23 +358,27 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
     async def async_step_bin_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Edit a bin (the MAC address stays the same)."""
+        """Name, calendar, password and battery (the beacon's UUIDs live in
+        the beacon screens)."""
         subentry = self._get_reconfigure_subentry()
         errors: dict[str, str] = {}
         if user_input is not None:
             name = user_input.pop(CONF_NAME).strip()
-            data, errors = _validate_details(user_input)
+            data, errors = _validate_common(user_input)
             if not errors:
-                data[CONF_ADDRESS] = subentry.data[CONF_ADDRESS]
-                if CONF_BEACON_PASSWORD not in data and (
-                    stored := subentry.data.get(CONF_BEACON_PASSWORD)
-                ):
-                    data[CONF_BEACON_PASSWORD] = stored
+                kept = {
+                    k: v
+                    for k, v in subentry.data.items()
+                    if k in (CONF_ADDRESS, CONF_IDLE_UUID, CONF_MOTION_UUID)
+                    or (k == CONF_BEACON_PASSWORD and CONF_BEACON_PASSWORD not in data)
+                    or (k == CONF_BATTERY_EFFICIENCY)
+                }
                 return self.async_update_and_abort(
-                    self._get_entry(), subentry, title=name or subentry.title, data=data
+                    self._get_entry(), subentry, title=name or subentry.title,
+                    data={**kept, **data},
                 )
         schema = vol.Schema({vol.Required(CONF_NAME): TextSelector()}).extend(
-            _details_schema().schema
+            _common_fields()
         )
         values = user_input or {
             CONF_NAME: subentry.title,
@@ -291,50 +392,47 @@ class BinSubentryFlow(BeaconStepsMixin, ConfigSubentryFlow):
         )
 
 
-def _details_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_IDLE_UUID): TextSelector(),
-            vol.Required(CONF_MOTION_UUID, default=MOTION_UUID_AUTO): TextSelector(),
-            vol.Optional(CONF_CALENDAR): EntitySelector(
-                EntitySelectorConfig(domain="calendar")
-            ),
-            vol.Optional(CONF_KEYWORD): TextSelector(),
-            vol.Optional(CONF_BEACON_PASSWORD): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.PASSWORD)
-            ),
-            vol.Optional(CONF_BATTERY_CAPACITY, default=DEFAULT_CAPACITY_MAH): NumberSelector(
-                NumberSelectorConfig(
-                    min=10, max=20000, step=10, unit_of_measurement="mAh",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
-        }
-    )
+def _fallback_identity(seen: tuple[IBeaconFrame, str | None, int | None] | None) -> dict[str, Any]:
+    if seen is not None:
+        frame = seen[0]
+        return {"uuid": frame.uuid.upper(), "majorID": frame.major, "minorID": frame.minor}
+    return {"uuid": KKM_DEFAULT_UUID, "majorID": 1, "minorID": 1}
 
 
-def _validate_details(
+def _beacon_placeholders(config: dict[str, Any]) -> dict[str, str]:
+    return {
+        "model": str(config.get("model", "?")),
+        "firmware": str(config.get("ver", "?")),
+        "battery": str(config.get("btPt", "?")),
+        "beacon_name": str(config.get("name", "")),
+        "motion": "ready" if motion_detection_ready(config) else (
+            "missing" if supports_motion(config) else "unsupported"
+        ),
+    }
+
+
+def _common_fields() -> dict[Any, Any]:
+    return {
+        vol.Optional(CONF_CALENDAR): EntitySelector(EntitySelectorConfig(domain="calendar")),
+        vol.Optional(CONF_KEYWORD): TextSelector(),
+        vol.Optional(CONF_BATTERY_CAPACITY, default=DEFAULT_CAPACITY_MAH): NumberSelector(
+            NumberSelectorConfig(
+                min=10, max=20000, step=10, unit_of_measurement="mAh",
+                mode=NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional(CONF_BEACON_PASSWORD): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        ),
+    }
+
+
+def _validate_common(
     user_input: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, str]]:
+    """Calendar, battery capacity and (optional) beacon password."""
     errors: dict[str, str] = {}
     data: dict[str, Any] = {}
-    try:
-        data[CONF_IDLE_UUID] = normalize_uuid(user_input[CONF_IDLE_UUID])
-    except ValueError:
-        errors[CONF_IDLE_UUID] = "invalid_uuid"
-
-    motion = user_input.get(CONF_MOTION_UUID, "").strip().lower() or MOTION_UUID_AUTO
-    if motion == MOTION_UUID_AUTO:
-        data[CONF_MOTION_UUID] = MOTION_UUID_AUTO
-    else:
-        try:
-            data[CONF_MOTION_UUID] = normalize_uuid(motion)
-        except ValueError:
-            errors[CONF_MOTION_UUID] = "invalid_uuid"
-        else:
-            if data[CONF_MOTION_UUID] == data.get(CONF_IDLE_UUID):
-                errors[CONF_MOTION_UUID] = "same_uuid"
-
     if password := (user_input.get(CONF_BEACON_PASSWORD) or "").strip():
         try:
             validate_password(password)
@@ -342,10 +440,8 @@ def _validate_details(
             errors[CONF_BEACON_PASSWORD] = "password_length"
         else:
             data[CONF_BEACON_PASSWORD] = password
-
     if (capacity := user_input.get(CONF_BATTERY_CAPACITY)) is not None:
         data[CONF_BATTERY_CAPACITY] = float(capacity)
-
     if calendar := user_input.get(CONF_CALENDAR):
         data[CONF_CALENDAR] = calendar
         data[CONF_KEYWORD] = (user_input.get(CONF_KEYWORD) or "").strip()

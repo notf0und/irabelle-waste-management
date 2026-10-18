@@ -54,6 +54,45 @@ def _fingerprint(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()[:16]
 
 
+async def async_beacon_session(
+    hass: HomeAssistant,
+    address: str,
+    password: str,
+    name: str,
+    action: Callable[[KBeaconClient], Awaitable[_T]],
+) -> _T:
+    """Connect to a KBeacon, log in, run ``action`` and disconnect."""
+    device = bluetooth.async_ble_device_from_address(hass, address, connectable=True)
+    if device is None:
+        raise BeaconError(
+            f"{name}: the beacon is not in range of a Bluetooth proxy that can connect"
+        )
+    try:
+        client = await establish_connection(
+            BleakClientWithServiceCache,
+            device,
+            f"{name} ({address})",
+            max_attempts=CONNECT_ATTEMPTS,
+        )
+    except (BleakError, TimeoutError) as err:
+        raise BeaconError(f"{name}: could not connect: {err}") from err
+    try:
+        beacon = KBeaconClient(client, address)
+        await beacon.login(password)
+        return await action(beacon)
+    except KBeaconAuthError as err:
+        raise BeaconLoginError(
+            f"{name}: login failed ({err}). Check the beacon password"
+        ) from err
+    except (KBeaconError, BleakError, TimeoutError) as err:
+        raise BeaconError(f"{name}: {err or type(err).__name__}") from err
+    finally:
+        try:
+            await client.disconnect()
+        except BleakError:
+            pass
+
+
 class BeaconManager:
     """Talks to the bins' KBeacons over Bluetooth, one session at a time each."""
 
@@ -117,39 +156,9 @@ class BeaconManager:
     ) -> _T:
         lock = self._locks.setdefault(bin_.subentry_id, asyncio.Lock())
         async with lock:
-            device = bluetooth.async_ble_device_from_address(
-                self.hass, bin_.address, connectable=True
+            return await async_beacon_session(
+                self.hass, bin_.address, bin_.password, bin_.name, action
             )
-            if device is None:
-                raise BeaconError(
-                    f"{bin_.name}: the beacon is not in range of a Bluetooth proxy "
-                    "that can connect"
-                )
-            try:
-                client = await establish_connection(
-                    BleakClientWithServiceCache,
-                    device,
-                    f"{bin_.name} ({bin_.address})",
-                    max_attempts=CONNECT_ATTEMPTS,
-                )
-            except (BleakError, TimeoutError) as err:
-                raise BeaconError(f"{bin_.name}: could not connect: {err}") from err
-            try:
-                beacon = KBeaconClient(client, bin_.address)
-                await beacon.login(bin_.password)
-                return await action(beacon)
-            except KBeaconAuthError as err:
-                raise BeaconLoginError(
-                    f"{bin_.name}: login failed ({err}). Check the beacon password "
-                    "in the bin settings"
-                ) from err
-            except (KBeaconError, BleakError, TimeoutError) as err:
-                raise BeaconError(f"{bin_.name}: {err or type(err).__name__}") from err
-            finally:
-                try:
-                    await client.disconnect()
-                except BleakError:
-                    pass
 
     async def _remember(self, bin_: Bin, config: dict[str, Any]) -> dict[str, Any]:
         self.cache[bin_.subentry_id] = {
