@@ -41,7 +41,7 @@ class BinEntity(Entity):
             manufacturer=MANUFACTURER,
             model="Bin beacon",
             serial_number=bin_.address,
-            via_device=(DOMAIN, hub.entry.entry_id),
+            via_device_id=hub.device_id,
         )
 
     async def async_added_to_hass(self) -> None:

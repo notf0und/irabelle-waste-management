@@ -5,10 +5,11 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
+from .entity import hub_device_info
 from .hub import WasteHub
 from .services import async_setup_services
 
@@ -35,6 +36,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: WasteConfigEntry) -> boo
     """Set up the hub and its bins."""
     hub = WasteHub(hass, entry)
     await hub.async_setup()
+    # Register the hub device first: the bin devices link to it by its device id.
+    hub.device_id = (
+        dr.async_get(hass)
+        .async_get_or_create(config_entry_id=entry.entry_id, **hub_device_info(hub))
+        .id
+    )
     entry.runtime_data = hub
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

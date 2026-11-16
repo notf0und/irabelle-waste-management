@@ -132,6 +132,8 @@ class WasteHub:
         """Initialise the hub from the entry and its bin subentries."""
         self.hass = hass
         self.entry = entry
+        #: Device registry id of the hub device, set by async_setup_entry.
+        self.device_id: str | None = None
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
         )
